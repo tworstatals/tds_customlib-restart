@@ -4462,9 +4462,52 @@ do
         return nil
     end
 
+    -- Live values pushed by the game via RemoteEvent.OnClientEvent
+    -- pattern: ("Session", "Update", "Values.Gems", <amount>)
+    local EventValues = {}
+
+    -- map the remote "Values.X" path tail -> our display key
+    local PathToKey = {
+        gems = "Gems",
+        coins = "Coins",
+        experience = "XP",
+        exp = "XP",
+        xp = "XP",
+        timescaletickets = "Tickets",
+        tickets = "Tickets",
+    }
+
+    pcall(function()
+        local RE = ReplicatedStorage:FindFirstChild("RemoteEvent")
+            or ReplicatedStorage:WaitForChild("RemoteEvent", 5)
+        if RE then
+            RE.OnClientEvent:Connect(function(...)
+                local a = {...}
+                if a[1] == "Session" and a[2] == "Update" and type(a[3]) == "string" then
+                    local tail = a[3]:match("([^%.]+)$")   -- "Values.Gems" -> "Gems"
+                    local val = tonumber(a[4])
+                    if tail and val then
+                        local key = PathToKey[tail:lower()]
+                        if key then
+                            EventValues[key] = val
+                        end
+                    end
+                end
+            end)
+        end
+    end)
+
+    -- prefer the live event value, fall back to the player stat object
+    local function ReadLive(key, names)
+        if EventValues[key] ~= nil then
+            return EventValues[key]
+        end
+        return ReadAny(names)
+    end
+
     -- seed the "last" values so we only count gains AFTER execution
     for key, names in pairs(StatKeys) do
-        Last[key] = ReadAny(names)
+        Last[key] = ReadLive(key, names)
     end
 
     -- build the small window (wrapped in pcall in case the UI lib differs)
@@ -4543,7 +4586,7 @@ do
             while true do
                 -- accumulate positive deltas (i.e. amounts gained, ignoring spending)
                 for key, names in pairs(StatKeys) do
-                    local cur = ReadAny(names)
+                    local cur = ReadLive(key, names)
                     if cur ~= nil then
                         local prev = Last[key]
                         if prev ~= nil and cur > prev then
@@ -4563,10 +4606,10 @@ do
                 local level = ReadStat("Level") or 0
 
                 -- live current values (for display + to prove reads work)
-                local curCoins   = ReadAny(StatKeys.Coins) or 0
-                local curXP      = ReadAny(StatKeys.XP) or 0
-                local curGems    = ReadAny(StatKeys.Gems) or 0
-                local curTickets = ReadAny(StatKeys.Tickets) or 0
+                local curCoins   = ReadLive("Coins", StatKeys.Coins) or 0
+                local curXP      = ReadLive("XP", StatKeys.XP) or 0
+                local curGems    = ReadLive("Gems", StatKeys.Gems) or 0
+                local curTickets = ReadLive("Tickets", StatKeys.Tickets) or 0
 
                 pcall(function()
                     CoinsLbl:SetTitle("Total Coins: " .. FmtNum(Totals.Coins) .. "  (now: " .. FmtNum(curCoins) .. ")")
