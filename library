@@ -4233,10 +4233,11 @@ local function StartAutoMercenary()
     end)
 end
 function TDS:ClearLog()
-	if Logger and Logger.Clear then
-		Logger:Clear()
-	end
-	Logger:Log("cleared")
+	pcall(function()
+		if Logger and Logger.Clear then
+			Logger:Clear()
+		end
+	end)
 end
 local function StartAutoMilitary()
     if not Globals.AutoMilitary then return end
