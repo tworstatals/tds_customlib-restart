@@ -4562,11 +4562,17 @@ do
 
                 local level = ReadStat("Level") or 0
 
+                -- live current values (for display + to prove reads work)
+                local curCoins   = ReadAny(StatKeys.Coins) or 0
+                local curXP      = ReadAny(StatKeys.XP) or 0
+                local curGems    = ReadAny(StatKeys.Gems) or 0
+                local curTickets = ReadAny(StatKeys.Tickets) or 0
+
                 pcall(function()
-                    CoinsLbl:SetTitle("Total Coins: " .. FmtNum(Totals.Coins))
-                    XPLbl:SetTitle("Total XP: " .. FmtNum(Totals.XP))
-                    GemsLbl:SetTitle("Total Gems: " .. FmtNum(Totals.Gems))
-                    TicketsLbl:SetTitle("Total Timescale Tickets: " .. FmtNum(Totals.Tickets))
+                    CoinsLbl:SetTitle("Total Coins: " .. FmtNum(Totals.Coins) .. "  (now: " .. FmtNum(curCoins) .. ")")
+                    XPLbl:SetTitle("Total XP: " .. FmtNum(Totals.XP) .. "  (now: " .. FmtNum(curXP) .. ")")
+                    GemsLbl:SetTitle("Total Gems: " .. FmtNum(Totals.Gems) .. "  (now: " .. FmtNum(curGems) .. ")")
+                    TicketsLbl:SetTitle("Total Timescale Tickets: " .. FmtNum(Totals.Tickets) .. "  (now: " .. FmtNum(curTickets) .. ")")
 
                     CoinsPH:SetTitle("Coins/h: " .. FmtNum(rate(Totals.Coins)))
                     XPPH:SetTitle("XP/h: " .. FmtNum(rate(Totals.XP)))
