@@ -4613,7 +4613,7 @@ do
 
                 pcall(function()
                     CoinsLbl:SetTitle("Total Coins: " .. FmtNum(Totals.Coins) .. "  (now: " .. FmtNum(curCoins) .. ")")
-                    XPLbl:SetTitle("Total XP: " .. FmtNum(Totals.XP))
+                    XPLbl:SetTitle("Total XP: " .. FmtNum(Totals.XP) .. "  (now: " .. FmtNum(curXP) .. ")")
                     GemsLbl:SetTitle("Total Gems: " .. FmtNum(Totals.Gems) .. "  (now: " .. FmtNum(curGems) .. ")")
                     TicketsLbl:SetTitle("Total Timescale Tickets: " .. FmtNum(Totals.Tickets) .. "  (now: " .. FmtNum(curTickets) .. ")")
 
