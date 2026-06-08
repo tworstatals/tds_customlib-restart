@@ -4409,15 +4409,26 @@ end
 
 -- // ===== Session Stats (separate small window) =====
 do
-    -- read a player stat (Value object first, then attribute)
+    -- read a player stat (Value object, attribute, or leaderstats child)
     local function ReadStat(name)
+        -- direct child of player
         local obj = LocalPlayer:FindFirstChild(name)
         if obj then
             local ok, v = pcall(function() return obj.Value end)
             if ok and type(v) == "number" then return v end
         end
+        -- attribute on the player
         local attr = LocalPlayer:GetAttribute(name)
         if type(attr) == "number" then return attr end
+        -- leaderstats folder fallback
+        local ls = LocalPlayer:FindFirstChild("leaderstats")
+        if ls then
+            local lobj = ls:FindFirstChild(name)
+            if lobj then
+                local ok, v = pcall(function() return lobj.Value end)
+                if ok and type(v) == "number" then return v end
+            end
+        end
         return nil
     end
 
@@ -4464,7 +4475,7 @@ do
             Theme = "Default",
             Config = {
                 Keybind = Enum.KeyCode.RightControl,
-                Size = UDim2.new(0, 300, 0, 250)
+                Size = UDim2.new(0, 500, 0, 400)
             }
         })
 
