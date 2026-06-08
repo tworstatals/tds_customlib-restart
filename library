@@ -3490,6 +3490,15 @@ function TDS:RestartGame()
     TriggerRestart()
 end
 
+-- Clears placed-tower tracking so indexes start fresh next match.
+-- Call this at the start of every run (after a restart) so TDS:Upgrade/Sell/etc
+-- don't point at old, destroyed towers from the previous match.
+function TDS:Reset()
+    table.clear(self.PlacedTowers)
+    table.clear(UpgradeHistory)
+    self.LastVoteSkipTarget = 0
+end
+
 function TDS:Place(TName, px, py, pz, ...)
     local args = {...}
     local isStacking = args[#args] == "stack" or args[#args] == true
@@ -3547,7 +3556,8 @@ end
 
 function TDS:Upgrade(idx, PId)
     local t = self.PlacedTowers[idx]
-    if t then
+    -- skip towers that no longer exist (e.g. stale entries after a restart)
+    if t and t.Parent then
         DoUpgradeTower(t, PId or 1)
         Logger:Log("Upgrading tower index: " .. idx)
         UpgradeHistory[idx] = (UpgradeHistory[idx] or 0) + 1
