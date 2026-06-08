@@ -4469,6 +4469,17 @@ do
 
     -- build the small window (wrapped in pcall in case the UI lib differs)
     local StatsOk, StatsErr = pcall(function()
+        -- snapshot existing window roots so we can find the new one afterwards
+        local AetherGui = game:GetService("CoreGui"):FindFirstChild("Aether")
+        local existingShadows = {}
+        if AetherGui then
+            for _, c in ipairs(AetherGui:GetChildren()) do
+                if c.Name == "Shadow" then
+                    existingShadows[c] = true
+                end
+            end
+        end
+
         local StatsWindow = Library:Window({
             Title = "Session Stats",
             Desc = "Gains since execution",
@@ -4478,6 +4489,28 @@ do
                 Size = UDim2.new(0, 500, 0, 400)
             }
         })
+
+        -- move the new window so it doesn't sit on top of the main hub
+        task.spawn(function()
+            AetherGui = AetherGui or game:GetService("CoreGui"):FindFirstChild("Aether")
+            if not AetherGui then return end
+            local NewShadow
+            local deadline = os.clock() + 5
+            repeat
+                for _, c in ipairs(AetherGui:GetChildren()) do
+                    if c.Name == "Shadow" and not existingShadows[c] then
+                        NewShadow = c
+                        break
+                    end
+                end
+                if not NewShadow then task.wait(0.1) end
+            until NewShadow or os.clock() > deadline
+
+            if NewShadow then
+                -- offset to the right of the main window (both are 500 wide -> ~520px gap)
+                NewShadow.Position = UDim2.new(0.5, 520, 0.5, 0)
+            end
+        end)
 
         local Tab = StatsWindow:Tab({ Title = "Stats", Icon = "bar-chart-3" })
         Tab:Section({ Title = "Totals (since start)" })
