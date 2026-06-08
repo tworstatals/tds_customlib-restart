@@ -4487,8 +4487,24 @@ do
         local GemsLbl    = Tab:Label({ Title = "Total Gems: 0", Desc = "" })
         local TicketsLbl = Tab:Label({ Title = "Total Timescale Tickets: 0", Desc = "" })
 
+        Tab:Section({ Title = "Rate (per hour)" })
+        local CoinsPH    = Tab:Label({ Title = "Coins/h: 0", Desc = "" })
+        local XPPH       = Tab:Label({ Title = "XP/h: 0", Desc = "" })
+        local GemsPH     = Tab:Label({ Title = "Gems/h: 0", Desc = "" })
+        local TicketsPH  = Tab:Label({ Title = "Tickets/h: 0", Desc = "" })
+
         Tab:Section({ Title = "Session" })
-        local TimeLbl = Tab:Label({ Title = "Time Running: 00:00:00", Desc = "" })
+        local LevelLbl = Tab:Label({ Title = "Current Level: 0", Desc = "" })
+        local TimeLbl  = Tab:Label({ Title = "Time Running: 00:00:00", Desc = "" })
+
+        -- format a per-hour number with comma separators
+        local function FmtNum(n)
+            n = math.floor(n + 0.5)
+            local s = tostring(n)
+            local out = s:reverse():gsub("(%d%d%d)", "%1,"):reverse()
+            out = out:gsub("^,", "")
+            return out
+        end
 
         task.spawn(function()
             while true do
@@ -4504,12 +4520,28 @@ do
                     end
                 end
 
+                local elapsed = os.clock() - StartClock
+                local hours = elapsed / 3600
+                local function rate(total)
+                    if hours <= 0 then return 0 end
+                    return total / hours
+                end
+
+                local level = ReadStat("Level") or 0
+
                 pcall(function()
-                    CoinsLbl:SetTitle("Total Coins: " .. tostring(Totals.Coins))
-                    XPLbl:SetTitle("Total XP: " .. tostring(Totals.XP))
-                    GemsLbl:SetTitle("Total Gems: " .. tostring(Totals.Gems))
-                    TicketsLbl:SetTitle("Total Timescale Tickets: " .. tostring(Totals.Tickets))
-                    TimeLbl:SetTitle("Time Running: " .. FmtTime(os.clock() - StartClock))
+                    CoinsLbl:SetTitle("Total Coins: " .. FmtNum(Totals.Coins))
+                    XPLbl:SetTitle("Total XP: " .. FmtNum(Totals.XP))
+                    GemsLbl:SetTitle("Total Gems: " .. FmtNum(Totals.Gems))
+                    TicketsLbl:SetTitle("Total Timescale Tickets: " .. FmtNum(Totals.Tickets))
+
+                    CoinsPH:SetTitle("Coins/h: " .. FmtNum(rate(Totals.Coins)))
+                    XPPH:SetTitle("XP/h: " .. FmtNum(rate(Totals.XP)))
+                    GemsPH:SetTitle("Gems/h: " .. FmtNum(rate(Totals.Gems)))
+                    TicketsPH:SetTitle("Tickets/h: " .. FmtNum(rate(Totals.Tickets)))
+
+                    LevelLbl:SetTitle("Current Level: " .. tostring(level))
+                    TimeLbl:SetTitle("Time Running: " .. FmtTime(elapsed))
                 end)
 
                 task.wait(1)
