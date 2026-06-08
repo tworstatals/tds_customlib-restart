@@ -4407,6 +4407,110 @@ if Globals.ClaimRewards and not AutoClaimRewards then
     StartClaimRewards()
 end
 
+-- // ===== Session Stats (separate small window) =====
+do
+    -- read a player stat (Value object first, then attribute)
+    local function ReadStat(name)
+        local obj = LocalPlayer:FindFirstChild(name)
+        if obj then
+            local ok, v = pcall(function() return obj.Value end)
+            if ok and type(v) == "number" then return v end
+        end
+        local attr = LocalPlayer:GetAttribute(name)
+        if type(attr) == "number" then return attr end
+        return nil
+    end
+
+    -- format seconds -> HH:MM:SS
+    local function FmtTime(sec)
+        sec = math.floor(sec)
+        local h = math.floor(sec / 3600)
+        local m = math.floor((sec % 3600) / 60)
+        local s = sec % 60
+        return string.format("%02d:%02d:%02d", h, m, s)
+    end
+
+    -- cumulative totals gained since execution
+    local Totals = { Coins = 0, XP = 0, Gems = 0, Tickets = 0 }
+    local Last = {}
+    local StartClock = os.clock()
+
+    -- map: display key -> list of stat names to try
+    local StatKeys = {
+        Coins   = { "Coins" },
+        XP      = { "Experience", "XP", "Exp" },
+        Gems    = { "Gems" },
+        Tickets = { "TimescaleTickets", "Tickets" },
+    }
+
+    local function ReadAny(names)
+        for _, n in ipairs(names) do
+            local v = ReadStat(n)
+            if v ~= nil then return v end
+        end
+        return nil
+    end
+
+    -- seed the "last" values so we only count gains AFTER execution
+    for key, names in pairs(StatKeys) do
+        Last[key] = ReadAny(names)
+    end
+
+    -- build the small window (wrapped in pcall in case the UI lib differs)
+    local StatsOk, StatsErr = pcall(function()
+        local StatsWindow = Library:Window({
+            Title = "Session Stats",
+            Desc = "Gains since execution",
+            Theme = "Default",
+            Config = {
+                Keybind = Enum.KeyCode.RightControl,
+                Size = UDim2.new(0, 300, 0, 250)
+            }
+        })
+
+        local Tab = StatsWindow:Tab({ Title = "Stats", Icon = "bar-chart-3" })
+        Tab:Section({ Title = "Totals (since start)" })
+
+        local CoinsLbl   = Tab:Label({ Title = "Total Coins: 0", Desc = "" })
+        local XPLbl      = Tab:Label({ Title = "Total XP: 0", Desc = "" })
+        local GemsLbl    = Tab:Label({ Title = "Total Gems: 0", Desc = "" })
+        local TicketsLbl = Tab:Label({ Title = "Total Timescale Tickets: 0", Desc = "" })
+
+        Tab:Section({ Title = "Session" })
+        local TimeLbl = Tab:Label({ Title = "Time Running: 00:00:00", Desc = "" })
+
+        task.spawn(function()
+            while true do
+                -- accumulate positive deltas (i.e. amounts gained, ignoring spending)
+                for key, names in pairs(StatKeys) do
+                    local cur = ReadAny(names)
+                    if cur ~= nil then
+                        local prev = Last[key]
+                        if prev ~= nil and cur > prev then
+                            Totals[key] = Totals[key] + (cur - prev)
+                        end
+                        Last[key] = cur
+                    end
+                end
+
+                pcall(function()
+                    CoinsLbl:SetTitle("Total Coins: " .. tostring(Totals.Coins))
+                    XPLbl:SetTitle("Total XP: " .. tostring(Totals.XP))
+                    GemsLbl:SetTitle("Total Gems: " .. tostring(Totals.Gems))
+                    TicketsLbl:SetTitle("Total Timescale Tickets: " .. tostring(Totals.Tickets))
+                    TimeLbl:SetTitle("Time Running: " .. FmtTime(os.clock() - StartClock))
+                end)
+
+                task.wait(1)
+            end
+        end)
+    end)
+
+    if not StatsOk then
+        warn("[Session Stats] failed to build window: " .. tostring(StatsErr))
+    end
+end
+
 MissionsUIFix()
 
 return TDS
