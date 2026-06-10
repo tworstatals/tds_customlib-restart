@@ -832,6 +832,29 @@ TDS:Mode("%s")%s
         end)
     end
 
+    -- read the player's currently-equipped tower names (for the Place builder)
+    local function get_equipped_towers()
+        local list = {}
+        local sr = replicated_storage:FindFirstChild("StateReplicators")
+        if sr then
+            for _, folder in ipairs(sr:GetChildren()) do
+                if folder.Name == "PlayerReplicator" and folder:GetAttribute("UserId") == local_player.UserId then
+                    local equipped = folder:GetAttribute("EquippedTowers")
+                    if type(equipped) == "string" then
+                        local cleaned = equipped:match("%[.*%]")
+                        local ok, t = pcall(function() return http_service:JSONDecode(cleaned) end)
+                        if ok and type(t) == "table" then
+                            for _, name in ipairs(t) do
+                                if name and name ~= "None" then table.insert(list, name) end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        return list
+    end
+
     -- ===== build the popup recorder menu (custom ScreenGui) =====
     local function build_menu()
         local parent = get_gui_parent()
@@ -971,13 +994,13 @@ TDS:Mode("%s")%s
 
         -- a small floating popup with actions for a placed-tower log row
         local actionPopup = nil
-        local function open_action_popup(fullCommand)
+        local function open_action_popup(fullCommand, coords, towerName)
             if actionPopup then actionPopup:Destroy() actionPopup = nil end
 
             local pop = Instance.new("Frame")
             pop.Name = "ActionPopup"
-            pop.Size = UDim2.new(0, 260, 0, 92)
-            pop.Position = UDim2.new(0.5, -130, 0.5, -46)
+            pop.Size = UDim2.new(0, 270, 0, 130)
+            pop.Position = UDim2.new(0.5, -135, 0.5, -65)
             pop.BackgroundColor3 = Color3.fromRGB(29, 28, 38)
             pop.BorderSizePixel = 0
             pop.ZIndex = 50
@@ -987,52 +1010,94 @@ TDS:Mode("%s")%s
             local ps = Instance.new("UIStroke") ps.Color = Color3.fromRGB(108, 30, 210) ps.Thickness = 1.5 ps.Parent = pop
             actionPopup = pop
 
-            -- close on click outside
+            local titleLbl = Instance.new("TextLabel")
+            titleLbl.BackgroundTransparency = 1
+            titleLbl.Position = UDim2.new(0, 10, 0, 6)
+            titleLbl.Size = UDim2.new(1, -40, 0, 18)
+            titleLbl.Font = Enum.Font.GothamBold
+            titleLbl.Text = tostring(towerName or "Tower")
+            titleLbl.TextSize = 13
+            titleLbl.TextXAlignment = Enum.TextXAlignment.Left
+            titleLbl.TextColor3 = Color3.fromRGB(255, 255, 255)
+            titleLbl.ZIndex = 51
+            titleLbl.Parent = pop
+
+            -- X button (high ZIndex so it can't be covered by the action buttons)
             local closeX = Instance.new("TextButton")
             closeX.AnchorPoint = Vector2.new(1, 0)
             closeX.Position = UDim2.new(1, -6, 0, 6)
-            closeX.Size = UDim2.new(0, 18, 0, 18)
-            closeX.BackgroundColor3 = Color3.fromRGB(60, 30, 30)
+            closeX.Size = UDim2.new(0, 20, 0, 20)
+            closeX.BackgroundColor3 = Color3.fromRGB(80, 35, 35)
             closeX.Text = "X"
             closeX.Font = Enum.Font.GothamBold
-            closeX.TextSize = 11
+            closeX.TextSize = 12
             closeX.TextColor3 = Color3.fromRGB(255, 255, 255)
-            closeX.ZIndex = 51
+            closeX.ZIndex = 60
+            closeX.Active = true
             closeX.Parent = pop
             local cxc = Instance.new("UICorner") cxc.CornerRadius = UDim.new(0, 4) cxc.Parent = closeX
             closeX.MouseButton1Click:Connect(function()
                 if actionPopup then actionPopup:Destroy() actionPopup = nil end
             end)
 
-            local function popBtn(text, y, color)
-                local b = Instance.new("TextButton")
-                b.Position = UDim2.new(0, 10, 0, y)
-                b.Size = UDim2.new(1, -20, 0, 30)
-                b.BackgroundColor3 = color
-                b.Text = text
-                b.Font = Enum.Font.Gotham
-                b.TextSize = 11
-                b.TextTruncate = Enum.TextTruncate.AtEnd
-                b.TextColor3 = Color3.fromRGB(255, 255, 255)
-                b.ZIndex = 51
-                b.Parent = pop
-                local bc = Instance.new("UICorner") bc.CornerRadius = UDim.new(0, 6) bc.Parent = b
-                return b
-            end
+            -- "copy this tower" row: a number-of-copies box + a button that
+            -- places that many copies of this exact tower at the same spot.
+            local countBox = Instance.new("TextBox")
+            countBox.Position = UDim2.new(0, 10, 0, 34)
+            countBox.Size = UDim2.new(0, 50, 0, 30)
+            countBox.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
+            countBox.Text = "1"
+            countBox.PlaceholderText = "N"
+            countBox.Font = Enum.Font.Code
+            countBox.TextSize = 13
+            countBox.TextColor3 = Color3.fromRGB(230, 230, 240)
+            countBox.ClearTextOnFocus = false
+            countBox.ZIndex = 52
+            countBox.Parent = pop
+            local cbx = Instance.new("UICorner") cbx.CornerRadius = UDim.new(0, 6) cbx.Parent = countBox
 
-            -- 1) replace same tower same place (re-runs the exact place command)
-            local replaceBtn = popBtn("replace same tower same place", 10, Color3.fromRGB(35, 120, 60))
-            replaceBtn.MouseButton1Click:Connect(function()
-                run_and_record(fullCommand)
+            local copyTowerBtn = Instance.new("TextButton")
+            copyTowerBtn.Position = UDim2.new(0, 68, 0, 34)
+            copyTowerBtn.Size = UDim2.new(1, -78, 0, 30)
+            copyTowerBtn.BackgroundColor3 = Color3.fromRGB(35, 120, 60)
+            copyTowerBtn.Text = "copy this tower"
+            copyTowerBtn.Font = Enum.Font.Gotham
+            copyTowerBtn.TextSize = 12
+            copyTowerBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+            copyTowerBtn.ZIndex = 52
+            copyTowerBtn.Parent = pop
+            local ctc = Instance.new("UICorner") ctc.CornerRadius = UDim.new(0, 6) ctc.Parent = copyTowerBtn
+
+            copyTowerBtn.MouseButton1Click:Connect(function()
+                local n = math.floor(tonumber(countBox.Text) or 1)
+                if n < 1 then n = 1 end
+                if n > 50 then n = 50 end
+                task.spawn(function()
+                    for _ = 1, n do
+                        run_and_record(fullCommand)
+                        task.wait(0.15)
+                    end
+                end)
                 if actionPopup then actionPopup:Destroy() actionPopup = nil end
             end)
 
-            -- 2) copy full TDS:Place(...)
-            local copyBtn = popBtn("copy " .. fullCommand, 48, Color3.fromRGB(60, 60, 80))
-            copyBtn.MouseButton1Click:Connect(function()
-                local ok = set_clipboard(fullCommand)
-                copyBtn.Text = ok and "copied!" or "no clipboard"
-                copyBtn.BackgroundColor3 = ok and Color3.fromRGB(35, 120, 60) or Color3.fromRGB(150, 50, 50)
+            -- "copy coordinates" button (copies just x, y, z)
+            local copyCoordsBtn = Instance.new("TextButton")
+            copyCoordsBtn.Position = UDim2.new(0, 10, 0, 72)
+            copyCoordsBtn.Size = UDim2.new(1, -20, 0, 30)
+            copyCoordsBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+            copyCoordsBtn.Text = "copy coordinates"
+            copyCoordsBtn.Font = Enum.Font.Gotham
+            copyCoordsBtn.TextSize = 12
+            copyCoordsBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+            copyCoordsBtn.ZIndex = 52
+            copyCoordsBtn.Parent = pop
+            local ccc = Instance.new("UICorner") ccc.CornerRadius = UDim.new(0, 6) ccc.Parent = copyCoordsBtn
+
+            copyCoordsBtn.MouseButton1Click:Connect(function()
+                local ok = set_clipboard(coords)
+                copyCoordsBtn.Text = ok and "copied!" or "no clipboard"
+                copyCoordsBtn.BackgroundColor3 = ok and Color3.fromRGB(35, 120, 60) or Color3.fromRGB(150, 50, 50)
                 task.delay(1, function()
                     if actionPopup then actionPopup:Destroy() actionPopup = nil end
                 end)
@@ -1040,7 +1105,7 @@ TDS:Mode("%s")%s
         end
 
         -- a log row WITH a button that opens the action popup
-        local function gui_log_copy(msg, fullCommand)
+        local function gui_log_copy(msg, fullCommand, coords, towerName)
             logOrder = logOrder + 1
             local row = Instance.new("Frame")
             row.BackgroundTransparency = 1
@@ -1068,7 +1133,7 @@ TDS:Mode("%s")%s
             copyBtn.Position = UDim2.new(1, 0, 0, 0)
             copyBtn.Size = UDim2.new(0, 104, 0, 16)
             copyBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
-            copyBtn.Text = "copy coordinates"
+            copyBtn.Text = "options"
             copyBtn.Font = Enum.Font.Gotham
             copyBtn.TextSize = 10
             copyBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -1076,7 +1141,7 @@ TDS:Mode("%s")%s
             local cbc = Instance.new("UICorner") cbc.CornerRadius = UDim.new(0, 4) cbc.Parent = copyBtn
 
             copyBtn.MouseButton1Click:Connect(function()
-                open_action_popup(fullCommand)
+                open_action_popup(fullCommand, coords, towerName)
             end)
 
             task.defer(function()
@@ -1102,39 +1167,194 @@ TDS:Mode("%s")%s
         local stopBtn  = mkBtn("STOP", 127, 105, Color3.fromRGB(150, 50, 50))
         local clearBtn = mkBtn("CLEAR", 244, 106, Color3.fromRGB(60, 60, 80))
 
-        -- console input row
-        local box = Instance.new("TextBox")
-        box.Position = UDim2.new(0, 10, 1, -38)
-        box.Size = UDim2.new(1, -90, 0, 28)
-        box.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
-        box.PlaceholderText = 'TDS:Place("Minigunner", x, y, z, true)'
-        box.Text = ""
-        box.ClearTextOnFocus = false
-        box.Font = Enum.Font.Code
-        box.TextSize = 12
-        box.TextColor3 = Color3.fromRGB(230, 230, 240)
-        box.TextXAlignment = Enum.TextXAlignment.Left
-        box.ClipsDescendants = true
-        box.Parent = root
-        local bxc = Instance.new("UICorner") bxc.CornerRadius = UDim.new(0, 6) bxc.Parent = box
-        local bxp = Instance.new("UIPadding") bxp.PaddingLeft = UDim.new(0, 8) bxp.PaddingRight = UDim.new(0, 8) bxp.Parent = box
+        -- action buttons row (instead of a typing console)
+        local sellActBtn = Instance.new("TextButton")
+        sellActBtn.Position = UDim2.new(0, 10, 1, -38)
+        sellActBtn.Size = UDim2.new(0.5, -15, 0, 28)
+        sellActBtn.BackgroundColor3 = Color3.fromRGB(150, 70, 40)
+        sellActBtn.Text = "Sell"
+        sellActBtn.Font = Enum.Font.GothamBold
+        sellActBtn.TextSize = 12
+        sellActBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        sellActBtn.Parent = root
+        local sac = Instance.new("UICorner") sac.CornerRadius = UDim.new(0, 6) sac.Parent = sellActBtn
 
-        local runBtn = Instance.new("TextButton")
-        runBtn.AnchorPoint = Vector2.new(1, 0)
-        runBtn.Position = UDim2.new(1, -10, 1, -38)
-        runBtn.Size = UDim2.new(0, 72, 0, 28)
-        runBtn.BackgroundColor3 = Color3.fromRGB(108, 30, 210)
-        runBtn.Text = "Run"
-        runBtn.Font = Enum.Font.GothamBold
-        runBtn.TextSize = 12
-        runBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-        runBtn.Parent = root
-        local rbc = Instance.new("UICorner") rbc.CornerRadius = UDim.new(0, 6) rbc.Parent = runBtn
+        local placeActBtn = Instance.new("TextButton")
+        placeActBtn.Position = UDim2.new(0.5, 5, 1, -38)
+        placeActBtn.Size = UDim2.new(0.5, -15, 0, 28)
+        placeActBtn.BackgroundColor3 = Color3.fromRGB(108, 30, 210)
+        placeActBtn.Text = "Place"
+        placeActBtn.Font = Enum.Font.GothamBold
+        placeActBtn.TextSize = 12
+        placeActBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        placeActBtn.Parent = root
+        local pac = Instance.new("UICorner") pac.CornerRadius = UDim.new(0, 6) pac.Parent = placeActBtn
+
+        -- popup helper to build small dialogs over the menu
+        local actionDialog = nil
+        local function close_dialog()
+            if actionDialog then actionDialog:Destroy() actionDialog = nil end
+        end
+        local function new_dialog(titleText, height)
+            close_dialog()
+            local d = Instance.new("Frame")
+            d.Name = "ActionDialog"
+            d.Size = UDim2.new(0, 280, 0, height)
+            d.Position = UDim2.new(0.5, -140, 0.5, -math.floor(height/2))
+            d.BackgroundColor3 = Color3.fromRGB(29, 28, 38)
+            d.BorderSizePixel = 0
+            d.ZIndex = 70
+            d.Active = true
+            d.Parent = gui
+            local dc = Instance.new("UICorner") dc.CornerRadius = UDim.new(0, 8) dc.Parent = d
+            local ds = Instance.new("UIStroke") ds.Color = Color3.fromRGB(108, 30, 210) ds.Thickness = 1.5 ds.Parent = d
+            actionDialog = d
+
+            local t = Instance.new("TextLabel")
+            t.BackgroundTransparency = 1
+            t.Position = UDim2.new(0, 10, 0, 6)
+            t.Size = UDim2.new(1, -36, 0, 18)
+            t.Font = Enum.Font.GothamBold
+            t.Text = titleText
+            t.TextSize = 13
+            t.TextXAlignment = Enum.TextXAlignment.Left
+            t.TextColor3 = Color3.fromRGB(255, 255, 255)
+            t.ZIndex = 71
+            t.Parent = d
+
+            local x = Instance.new("TextButton")
+            x.AnchorPoint = Vector2.new(1, 0)
+            x.Position = UDim2.new(1, -6, 0, 6)
+            x.Size = UDim2.new(0, 20, 0, 20)
+            x.BackgroundColor3 = Color3.fromRGB(80, 35, 35)
+            x.Text = "X"
+            x.Font = Enum.Font.GothamBold
+            x.TextSize = 12
+            x.TextColor3 = Color3.fromRGB(255, 255, 255)
+            x.ZIndex = 80
+            x.Active = true
+            x.Parent = d
+            local xc = Instance.new("UICorner") xc.CornerRadius = UDim.new(0, 4) xc.Parent = x
+            x.MouseButton1Click:Connect(close_dialog)
+            return d
+        end
+
+        -- SELL dialog: type an index, press Sell
+        local function open_sell_dialog()
+            local d = new_dialog("Sell tower by index", 110)
+
+            local idxBox = Instance.new("TextBox")
+            idxBox.Position = UDim2.new(0, 10, 0, 36)
+            idxBox.Size = UDim2.new(1, -20, 0, 28)
+            idxBox.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
+            idxBox.PlaceholderText = "index (e.g. 1)"
+            idxBox.Text = ""
+            idxBox.Font = Enum.Font.Code
+            idxBox.TextSize = 13
+            idxBox.TextColor3 = Color3.fromRGB(230, 230, 240)
+            idxBox.ClearTextOnFocus = false
+            idxBox.ZIndex = 72
+            idxBox.Parent = d
+            local ic = Instance.new("UICorner") ic.CornerRadius = UDim.new(0, 6) ic.Parent = idxBox
+
+            local go = Instance.new("TextButton")
+            go.Position = UDim2.new(0, 10, 0, 72)
+            go.Size = UDim2.new(1, -20, 0, 28)
+            go.BackgroundColor3 = Color3.fromRGB(150, 70, 40)
+            go.Text = "Sell"
+            go.Font = Enum.Font.GothamBold
+            go.TextSize = 12
+            go.TextColor3 = Color3.fromRGB(255, 255, 255)
+            go.ZIndex = 72
+            go.Parent = d
+            local gc = Instance.new("UICorner") gc.CornerRadius = UDim.new(0, 6) gc.Parent = go
+
+            go.MouseButton1Click:Connect(function()
+                local n = math.floor(tonumber(idxBox.Text) or 0)
+                if n >= 1 then
+                    run_and_record("TDS:Sell(" .. n .. ")")
+                    close_dialog()
+                end
+            end)
+        end
+
+        -- PLACE dialog: pick a tower, type x/y/z, press Place (always stacked)
+        local function open_place_dialog()
+            local d = new_dialog("Place tower", 210)
+
+            local towers = get_equipped_towers()
+            if #towers == 0 then towers = {"None"} end
+            local selected = towers[1]
+
+            -- tower selector (cycling button)
+            local towerBtn = Instance.new("TextButton")
+            towerBtn.Position = UDim2.new(0, 10, 0, 34)
+            towerBtn.Size = UDim2.new(1, -20, 0, 28)
+            towerBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 60)
+            towerBtn.Text = "Tower: " .. tostring(selected)
+            towerBtn.Font = Enum.Font.Gotham
+            towerBtn.TextSize = 12
+            towerBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+            towerBtn.ZIndex = 72
+            towerBtn.Parent = d
+            local tbc = Instance.new("UICorner") tbc.CornerRadius = UDim.new(0, 6) tbc.Parent = towerBtn
+            local ti = 1
+            towerBtn.MouseButton1Click:Connect(function()
+                ti = ti % #towers + 1
+                selected = towers[ti]
+                towerBtn.Text = "Tower: " .. tostring(selected)
+            end)
+
+            local function coordBox(ph, y)
+                local b = Instance.new("TextBox")
+                b.Position = UDim2.new(0, 10, 0, y)
+                b.Size = UDim2.new(1, -20, 0, 26)
+                b.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
+                b.PlaceholderText = ph
+                b.Text = ""
+                b.Font = Enum.Font.Code
+                b.TextSize = 12
+                b.TextColor3 = Color3.fromRGB(230, 230, 240)
+                b.ClearTextOnFocus = false
+                b.ZIndex = 72
+                b.Parent = d
+                local c = Instance.new("UICorner") c.CornerRadius = UDim.new(0, 6) c.Parent = b
+                return b
+            end
+            local xBox = coordBox("X", 68)
+            local yBox = coordBox("Y", 100)
+            local zBox = coordBox("Z", 132)
+
+            local go = Instance.new("TextButton")
+            go.Position = UDim2.new(0, 10, 0, 168)
+            go.Size = UDim2.new(1, -20, 0, 30)
+            go.BackgroundColor3 = Color3.fromRGB(108, 30, 210)
+            go.Text = "Place (stacked)"
+            go.Font = Enum.Font.GothamBold
+            go.TextSize = 12
+            go.TextColor3 = Color3.fromRGB(255, 255, 255)
+            go.ZIndex = 72
+            go.Parent = d
+            local gc = Instance.new("UICorner") gc.CornerRadius = UDim.new(0, 6) gc.Parent = go
+
+            go.MouseButton1Click:Connect(function()
+                local xv = tonumber(xBox.Text)
+                local yv = tonumber(yBox.Text)
+                local zv = tonumber(zBox.Text)
+                if selected and selected ~= "None" and xv and yv and zv then
+                    run_and_record(string.format('TDS:Place("%s", %s, %s, %s, true)', selected, tostring(xv), tostring(yv), tostring(zv)))
+                    close_dialog()
+                end
+            end)
+        end
+
+        sellActBtn.MouseButton1Click:Connect(open_sell_dialog)
+        placeActBtn.MouseButton1Click:Connect(open_place_dialog)
 
         -- expose menu interface
         local obj = {}
         function obj.Log(msg) pcall(gui_log, msg) end
-        function obj.LogCopy(msg, copyText) pcall(gui_log_copy, msg, copyText) end
+        function obj.LogCopy(msg, fullCommand, coords, towerName) pcall(gui_log_copy, msg, fullCommand, coords, towerName) end
         function obj.Clear() pcall(gui_clear) end
         function obj.Show() gui.Enabled = true root.Visible = true end
         function obj.Hide() gui.Enabled = false end
@@ -1145,17 +1365,7 @@ TDS:Mode("%s")%s
         clearBtn.MouseButton1Click:Connect(function() obj.Clear() end)
         closeBtn.MouseButton1Click:Connect(function() obj.Hide() end)
 
-        local function submit()
-            local t = box.Text
-            box.Text = ""
-            run_and_record(t)
-        end
-        runBtn.MouseButton1Click:Connect(submit)
-        box.FocusLost:Connect(function(enter)
-            if enter then submit() end
-        end)
-
-        obj.Log("Recorder menu ready. Press START, then place towers or type commands.")
+        obj.Log("Recorder menu ready. Press START, then place towers or use Sell / Place.")
         return obj
     end
 
@@ -1219,9 +1429,10 @@ TDS:Mode("%s")%s
                     -- tower can be re-placed at the exact same spot via stacking.
                     local command = 'TDS:Place("' .. tower_name .. '", ' .. tostring(pos_x) .. ', ' .. tostring(pos_y) .. ', ' .. tostring(pos_z) .. ', true)'
                     record_action(command)
-                    -- log line WITH a button that opens an action popup (copies/repeats the full command)
+                    -- log line WITH a button that opens an action popup (copy this tower / copy coordinates)
+                    local coords = tostring(pos_x) .. ", " .. tostring(pos_y) .. ", " .. tostring(pos_z)
                     if menu and menu.LogCopy then
-                        menu.LogCopy("Placed " .. tower_name .. " (Index: " .. my_index .. ")", command)
+                        menu.LogCopy("Placed " .. tower_name .. " (Index: " .. my_index .. ")", command, coords, tower_name)
                     else
                         log_line("Placed " .. tower_name .. " (Index: " .. my_index .. ")")
                     end
