@@ -855,6 +855,50 @@ TDS:Mode("%s")%s
         return list
     end
 
+    -- direct remote (fire actions ONCE, like a manual placement)
+    local RemoteFunc = replicated_storage:FindFirstChild("RemoteFunction")
+        or replicated_storage:WaitForChild("RemoteFunction", 5)
+
+    -- parse "x, y, z" (also tolerates spaces / extra junk) -> three numbers
+    local function parse_coords(s)
+        local nums = {}
+        for num in tostring(s):gmatch("-?%d+%.?%d*") do
+            nums[#nums + 1] = tonumber(num)
+        end
+        return nums[1], nums[2], nums[3]
+    end
+
+    -- Place a tower ONCE (no retry). The auto-recorder (ChildAdded) records the
+    -- resulting tower with the correct index, so we do NOT record manually here.
+    local function place_once(towerName, x, y, z)
+        if not RemoteFunc or not towerName or towerName == "" then return false end
+        if not (x and y and z) then return false end
+        local ok = pcall(function()
+            -- elevate Y like the manual stacker so it stacks onto whatever is below
+            RemoteFunc:InvokeServer("Troops", "Place",
+                { Rotation = CFrame.new(), Position = Vector3.new(x, y + 25, z) }, towerName)
+        end)
+        return ok
+    end
+
+    -- Sell a tower by its recorder index ONCE. The auto-recorder (ChildRemoved)
+    -- records TDS:Sell(idx) with the correct index.
+    local function sell_index(n)
+        if not RemoteFunc then return false end
+        local target
+        for tower, idx in pairs(spawned_towers) do
+            if idx == n then target = tower break end
+        end
+        if not target then
+            if menu then menu.Log("No tower with index " .. tostring(n)) end
+            return false
+        end
+        local ok = pcall(function()
+            RemoteFunc:InvokeServer("Troops", "Sell", { Troop = target })
+        end)
+        return ok
+    end
+
     -- ===== build the popup recorder menu (custom ScreenGui) =====
     local function build_menu()
         local parent = get_gui_parent()
@@ -1072,12 +1116,15 @@ TDS:Mode("%s")%s
                 local n = math.floor(tonumber(countBox.Text) or 1)
                 if n < 1 then n = 1 end
                 if n > 50 then n = 50 end
-                task.spawn(function()
-                    for _ = 1, n do
-                        run_and_record(fullCommand)
-                        task.wait(0.15)
-                    end
-                end)
+                local cx, cy, cz = parse_coords(coords)
+                if towerName and towerName ~= "None" and cx and cy and cz then
+                    task.spawn(function()
+                        for _ = 1, n do
+                            place_once(towerName, cx, cy, cz)   -- one try each; auto-recorder logs them
+                            task.wait(0.2)
+                        end
+                    end)
+                end
                 if actionPopup then actionPopup:Destroy() actionPopup = nil end
             end)
 
@@ -1272,62 +1319,97 @@ TDS:Mode("%s")%s
             go.MouseButton1Click:Connect(function()
                 local n = math.floor(tonumber(idxBox.Text) or 0)
                 if n >= 1 then
-                    run_and_record("TDS:Sell(" .. n .. ")")
+                    sell_index(n)   -- fires once; auto-recorder writes TDS:Sell(n)
                     close_dialog()
                 end
             end)
         end
 
-        -- PLACE dialog: pick a tower, type x/y/z, press Place (always stacked)
+        -- PLACE dialog: pick a tower (dropdown list), type "x, y, z", press Place
         local function open_place_dialog()
-            local d = new_dialog("Place tower", 210)
-
             local towers = get_equipped_towers()
             if #towers == 0 then towers = {"None"} end
             local selected = towers[1]
 
-            -- tower selector (cycling button)
+            local d = new_dialog("Place tower", 160)
+
+            -- coordinates box ("x, y, z")
+            local coordBox = Instance.new("TextBox")
+            coordBox.Position = UDim2.new(0, 10, 0, 34)
+            coordBox.Size = UDim2.new(1, -20, 0, 28)
+            coordBox.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
+            coordBox.PlaceholderText = "-7.24, 0.56, 4.14"
+            coordBox.Text = ""
+            coordBox.Font = Enum.Font.Code
+            coordBox.TextSize = 12
+            coordBox.TextColor3 = Color3.fromRGB(230, 230, 240)
+            coordBox.ClearTextOnFocus = false
+            coordBox.ClipsDescendants = true
+            coordBox.ZIndex = 72
+            coordBox.Parent = d
+            local cc = Instance.new("UICorner") cc.CornerRadius = UDim.new(0, 6) cc.Parent = coordBox
+            local cpad = Instance.new("UIPadding") cpad.PaddingLeft = UDim.new(0, 8) cpad.PaddingRight = UDim.new(0, 8) cpad.Parent = coordBox
+
+            -- tower selector: button that opens a real selectable list
             local towerBtn = Instance.new("TextButton")
-            towerBtn.Position = UDim2.new(0, 10, 0, 34)
+            towerBtn.Position = UDim2.new(0, 10, 0, 70)
             towerBtn.Size = UDim2.new(1, -20, 0, 28)
             towerBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 60)
-            towerBtn.Text = "Tower: " .. tostring(selected)
+            towerBtn.Text = "Tower: " .. tostring(selected) .. "  ▼"
             towerBtn.Font = Enum.Font.Gotham
             towerBtn.TextSize = 12
             towerBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
             towerBtn.ZIndex = 72
             towerBtn.Parent = d
             local tbc = Instance.new("UICorner") tbc.CornerRadius = UDim.new(0, 6) tbc.Parent = towerBtn
-            local ti = 1
+
+            local listFrame   -- created on demand
+            local function close_list()
+                if listFrame then listFrame:Destroy() listFrame = nil end
+            end
             towerBtn.MouseButton1Click:Connect(function()
-                ti = ti % #towers + 1
-                selected = towers[ti]
-                towerBtn.Text = "Tower: " .. tostring(selected)
+                if listFrame then close_list() return end
+                listFrame = Instance.new("Frame")
+                listFrame.Size = UDim2.new(1, -20, 0, math.min(#towers, 5) * 24 + 4)
+                listFrame.Position = UDim2.new(0, 10, 0, 98)
+                listFrame.BackgroundColor3 = Color3.fromRGB(24, 24, 31)
+                listFrame.BorderSizePixel = 0
+                listFrame.ZIndex = 90
+                listFrame.Parent = d
+                local lfc = Instance.new("UICorner") lfc.CornerRadius = UDim.new(0, 6) lfc.Parent = listFrame
+                local lfs = Instance.new("UIStroke") lfs.Color = Color3.fromRGB(108, 30, 210) lfs.Parent = listFrame
+                local sf = Instance.new("ScrollingFrame")
+                sf.Size = UDim2.new(1, -4, 1, -4)
+                sf.Position = UDim2.new(0, 2, 0, 2)
+                sf.BackgroundTransparency = 1
+                sf.BorderSizePixel = 0
+                sf.ScrollBarThickness = 3
+                sf.CanvasSize = UDim2.new(0, 0, 0, #towers * 24)
+                sf.ZIndex = 91
+                sf.Parent = listFrame
+                local ll = Instance.new("UIListLayout") ll.Padding = UDim.new(0, 2) ll.Parent = sf
+                for _, name in ipairs(towers) do
+                    local item = Instance.new("TextButton")
+                    item.Size = UDim2.new(1, 0, 0, 22)
+                    item.BackgroundColor3 = Color3.fromRGB(40, 40, 52)
+                    item.Text = name
+                    item.Font = Enum.Font.Gotham
+                    item.TextSize = 12
+                    item.TextColor3 = Color3.fromRGB(255, 255, 255)
+                    item.ZIndex = 92
+                    item.Parent = sf
+                    local ic2 = Instance.new("UICorner") ic2.CornerRadius = UDim.new(0, 4) ic2.Parent = item
+                    item.MouseButton1Click:Connect(function()
+                        selected = name
+                        towerBtn.Text = "Tower: " .. tostring(selected) .. "  ▼"
+                        close_list()
+                    end)
+                end
             end)
 
-            local function coordBox(ph, y)
-                local b = Instance.new("TextBox")
-                b.Position = UDim2.new(0, 10, 0, y)
-                b.Size = UDim2.new(1, -20, 0, 26)
-                b.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
-                b.PlaceholderText = ph
-                b.Text = ""
-                b.Font = Enum.Font.Code
-                b.TextSize = 12
-                b.TextColor3 = Color3.fromRGB(230, 230, 240)
-                b.ClearTextOnFocus = false
-                b.ZIndex = 72
-                b.Parent = d
-                local c = Instance.new("UICorner") c.CornerRadius = UDim.new(0, 6) c.Parent = b
-                return b
-            end
-            local xBox = coordBox("X", 68)
-            local yBox = coordBox("Y", 100)
-            local zBox = coordBox("Z", 132)
-
             local go = Instance.new("TextButton")
-            go.Position = UDim2.new(0, 10, 0, 168)
-            go.Size = UDim2.new(1, -20, 0, 30)
+            go.Position = UDim2.new(0, 10, 0, 110)
+            go.Size = UDim2.new(1, -20, 0, 32)
             go.BackgroundColor3 = Color3.fromRGB(108, 30, 210)
             go.Text = "Place (stacked)"
             go.Font = Enum.Font.GothamBold
@@ -1338,11 +1420,9 @@ TDS:Mode("%s")%s
             local gc = Instance.new("UICorner") gc.CornerRadius = UDim.new(0, 6) gc.Parent = go
 
             go.MouseButton1Click:Connect(function()
-                local xv = tonumber(xBox.Text)
-                local yv = tonumber(yBox.Text)
-                local zv = tonumber(zBox.Text)
+                local xv, yv, zv = parse_coords(coordBox.Text)
                 if selected and selected ~= "None" and xv and yv and zv then
-                    run_and_record(string.format('TDS:Place("%s", %s, %s, %s, true)', selected, tostring(xv), tostring(yv), tostring(zv)))
+                    place_once(selected, xv, yv, zv)   -- fires once; auto-recorder writes the line
                     close_dialog()
                 end
             end)
