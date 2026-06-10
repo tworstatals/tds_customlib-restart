@@ -3004,6 +3004,7 @@ end
 local function DoPlaceTower(TName, TPos, ...)
     local args = {...}
     Logger:Log("Placing tower: " .. TName)
+    local attempts = 0
     while true do
         local ok, res = pcall(function()
             return RemoteFunc:InvokeServer("Troops", "Place", {
@@ -3013,6 +3014,11 @@ local function DoPlaceTower(TName, TPos, ...)
         end)
 
         if ok and CheckResOk(res) then return true end
+        attempts += 1
+        if attempts >= 40 then        -- ~10s; avoid freezing the strat forever
+            Logger:Log("Place failed after retries: " .. TName)
+            return false
+        end
         task.wait(0.25)
     end
 end
@@ -3450,11 +3456,13 @@ function TDS:Place(TName, px, py, pz, ...)
     local args = {...}
     local isStacking = args[#args] == "stack" or args[#args] == true
 
-    -- Stacking is free (no premium / key system). Drop the trailing
-    -- "stack"/true flag so it isn't forwarded to the server; the elevated
-    -- Y is already baked into py by the recorder.
+    -- Stacking is free (no premium / key system).
+    -- We replicate the manual stacker's proven method: place the tower at an
+    -- elevated Y so the server drops/snaps it onto the tower below. Without the
+    -- elevation the server rejects the placement and nothing happens.
     if isStacking then
-        table.remove(args)
+        table.remove(args)              -- strip the trailing "stack"/true flag
+        py = py + 25                    -- raise Y like the manual stacker does
     end
 
     if GameState ~= "GAME" then
@@ -3474,6 +3482,7 @@ function TDS:Place(TName, px, py, pz, ...)
     DoPlaceTower(TName, Vector3.new(px, py, pz), unpack(args))
 
     local NewT
+    local deadline = os.clock() + 5
     repeat
         for _, child in ipairs(workspace.Towers:GetChildren()) do
             if not existing[child] then
@@ -3486,8 +3495,8 @@ function TDS:Place(TName, px, py, pz, ...)
             end
             if NewT then break end
         end
-        task.wait(0.05)
-    until NewT
+        if not NewT then task.wait(0.05) end
+    until NewT or os.clock() > deadline
 
     table.insert(self.PlacedTowers, NewT)
     return #self.PlacedTowers
