@@ -3512,19 +3512,13 @@ function TDS:Place(TName, px, py, pz, ...)
     local args = {...}
     local isStacking = args[#args] == "stack" or args[#args] == true
 
-    if isStacking and not PremiumLoaded and GameState == "GAME" then
-        Window:Notify({
-            Title = "ADS",
-            Desc = "Stacking requires Premium. Automatically loading key system...",
-            Time = 3,
-            Type = "normal"
-        })
-
-        local success = self:Addons()
-        if success then 
-            return self:Place(TName, px, py, pz, unpack(args))
-        end
-        return false
+    -- Stacking no longer requires Premium.
+    -- Stacked towers are simply placed at their exact (elevated Y) position,
+    -- which the recorder already captured. The server accepts this the same
+    -- way the free manual mouse-stacking does, so no addon/key system is needed.
+    if isStacking then
+        -- drop the trailing "stack"/true flag so it isn't sent to the server
+        table.remove(args)
     end
 
     if GameState ~= "GAME" then
