@@ -901,6 +901,16 @@ TDS:Mode("%s")%s
 
     -- Upgrade a single tower by its recorder index ONCE. The namecall hook
     -- auto-records TDS:Upgrade(idx).
+    -- did the upgrade remote actually succeed?
+    local function upgrade_result_ok(res)
+        if res == true then return true end
+        if type(res) == "table" and (res.Success == true or res.success == true) then return true end
+        return false
+    end
+
+    -- Upgrade a single tower (by recorder index). Captures the server result and
+    -- records TDS:Upgrade(idx) ONLY when the upgrade is confirmed. Suppresses the
+    -- auto-hook so it isn't recorded twice.
     local function upgrade_index(n)
         if not RemoteFunc then return false end
         local target
@@ -911,30 +921,48 @@ TDS:Mode("%s")%s
             if menu then menu.Log("No tower with index " .. tostring(n)) end
             return false
         end
-        local ok = pcall(function()
-            RemoteFunc:InvokeServer("Troops", "Upgrade", "Set", { Troop = target })
+        suppress_until = os.clock() + 2   -- block auto-hook for this action
+        local ok, res = pcall(function()
+            return RemoteFunc:InvokeServer("Troops", "Upgrade", "Set", { Troop = target })
         end)
-        return ok
+        if ok and upgrade_result_ok(res) then
+            record_raw(string.format("TDS:Upgrade(%d)", n))
+            if menu then menu.Log("Upgraded (Index: " .. n .. ")") end
+            suppress_until = os.clock() + 0.3
+            return true
+        end
+        suppress_until = 0
+        return false
     end
 
-    -- Upgrade ALL of your towers of a given type (name) ONCE each. Each fire is
-    -- auto-recorded by the namecall hook.
+    -- Upgrade ALL of your towers of a given type, but ONLY record each upgrade
+    -- that is actually confirmed by the server (skips max-level / no-cash ones).
     local function upgrade_by_type(towerName)
         if not RemoteFunc or not towerName or towerName == "" then return 0 end
-        local count = 0
         local folder = workspace_ref:FindFirstChild("Towers")
         if not folder then return 0 end
+
+        suppress_until = os.clock() + 30   -- block auto-hook for the whole batch
+        local count = 0
         for _, tower in ipairs(folder:GetChildren()) do
             local rep = tower:FindFirstChild("TowerReplicator")
             if rep and rep:GetAttribute("OwnerId") == local_player.UserId
                 and rep:GetAttribute("Name") == towerName then
-                pcall(function()
-                    RemoteFunc:InvokeServer("Troops", "Upgrade", "Set", { Troop = tower })
-                end)
-                count += 1
-                task.wait(0.15)
+                local idx = resolve_tower_index(tower)
+                if idx then
+                    suppress_until = os.clock() + 30
+                    local ok, res = pcall(function()
+                        return RemoteFunc:InvokeServer("Troops", "Upgrade", "Set", { Troop = tower })
+                    end)
+                    if ok and upgrade_result_ok(res) then
+                        record_raw(string.format("TDS:Upgrade(%d)", idx))
+                        count += 1
+                    end
+                    task.wait(0.2)
+                end
             end
         end
+        suppress_until = os.clock() + 0.3
         return count
     end
 
@@ -1254,10 +1282,12 @@ TDS:Mode("%s")%s
         local clearBtn = mkBtn("CLEAR", 244, 106, Color3.fromRGB(60, 60, 80))
 
         -- action buttons row (instead of a typing console): Sell / Place / Upgrade
-        local function mkActBtn(text, xScale, xOff, wScale, wOff, color)
+        -- three EQUAL-width columns (root is 360 wide: 10px margins + 6px gaps -> 109px each)
+        local ACT_W = 109
+        local function mkActBtn(text, xOff, color)
             local b = Instance.new("TextButton")
-            b.Position = UDim2.new(xScale, xOff, 1, -38)
-            b.Size = UDim2.new(wScale, wOff, 0, 28)
+            b.Position = UDim2.new(0, xOff, 1, -38)
+            b.Size = UDim2.new(0, ACT_W, 0, 28)
             b.BackgroundColor3 = color
             b.Text = text
             b.Font = Enum.Font.GothamBold
@@ -1267,10 +1297,9 @@ TDS:Mode("%s")%s
             local c = Instance.new("UICorner") c.CornerRadius = UDim.new(0, 6) c.Parent = b
             return b
         end
-        -- three equal-ish columns
-        local sellActBtn    = mkActBtn("Sell",    0,    10, 1/3, -14, Color3.fromRGB(150, 70, 40))
-        local placeActBtn   = mkActBtn("Place",   1/3,   2, 1/3, -4,  Color3.fromRGB(108, 30, 210))
-        local upgradeActBtn = mkActBtn("Upgrade", 2/3,  -2, 1/3, -8,  Color3.fromRGB(40, 110, 130))
+        local sellActBtn    = mkActBtn("Sell",    10,  Color3.fromRGB(150, 70, 40))
+        local placeActBtn   = mkActBtn("Place",   125, Color3.fromRGB(108, 30, 210))
+        local upgradeActBtn = mkActBtn("Upgrade", 240, Color3.fromRGB(40, 110, 130))
 
         -- popup helper to build small dialogs over the menu
         local actionDialog = nil
@@ -1366,7 +1395,7 @@ TDS:Mode("%s")%s
             if #towers == 0 then towers = {"None"} end
             local selected = towers[1]
 
-            local d = new_dialog("Place tower", 160)
+            local d = new_dialog("Place tower", 196)
 
             -- coordinates box ("x, y, z")
             local coordBox = Instance.new("TextBox")
@@ -1442,8 +1471,35 @@ TDS:Mode("%s")%s
                 end
             end)
 
+            -- amount / multiplier box (how many to place)
+            local countLbl = Instance.new("TextLabel")
+            countLbl.BackgroundTransparency = 1
+            countLbl.Position = UDim2.new(0, 10, 0, 110)
+            countLbl.Size = UDim2.new(0, 70, 0, 28)
+            countLbl.Font = Enum.Font.Gotham
+            countLbl.Text = "Amount:"
+            countLbl.TextSize = 12
+            countLbl.TextXAlignment = Enum.TextXAlignment.Left
+            countLbl.TextColor3 = Color3.fromRGB(220, 220, 230)
+            countLbl.ZIndex = 72
+            countLbl.Parent = d
+
+            local countBox = Instance.new("TextBox")
+            countBox.Position = UDim2.new(0, 80, 0, 110)
+            countBox.Size = UDim2.new(1, -90, 0, 28)
+            countBox.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
+            countBox.PlaceholderText = "1"
+            countBox.Text = "1"
+            countBox.Font = Enum.Font.Code
+            countBox.TextSize = 13
+            countBox.TextColor3 = Color3.fromRGB(230, 230, 240)
+            countBox.ClearTextOnFocus = false
+            countBox.ZIndex = 72
+            countBox.Parent = d
+            local ctc = Instance.new("UICorner") ctc.CornerRadius = UDim.new(0, 6) ctc.Parent = countBox
+
             local go = Instance.new("TextButton")
-            go.Position = UDim2.new(0, 10, 0, 110)
+            go.Position = UDim2.new(0, 10, 0, 150)
             go.Size = UDim2.new(1, -20, 0, 32)
             go.BackgroundColor3 = Color3.fromRGB(108, 30, 210)
             go.Text = "Place (stacked)"
@@ -1457,8 +1513,16 @@ TDS:Mode("%s")%s
             go.MouseButton1Click:Connect(function()
                 local xv, yv, zv = parse_coords(coordBox.Text)
                 if selected and selected ~= "None" and xv and yv and zv then
-                    place_once(selected, xv, yv, zv)   -- fires once; auto-recorder writes the line
+                    local n = math.floor(tonumber(countBox.Text) or 1)
+                    if n < 1 then n = 1 end
+                    if n > 50 then n = 50 end
                     close_dialog()
+                    task.spawn(function()
+                        for _ = 1, n do
+                            place_once(selected, xv, yv, zv)   -- one fire each; auto-recorder logs confirmed ones
+                            task.wait(0.25)
+                        end
+                    end)
                 end
             end)
         end
