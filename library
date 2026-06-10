@@ -935,40 +935,10 @@ end
 
 local IsCurrentlyLoading = false
 
+-- Premium / key system fully removed. Kept as a no-op so any remaining
+-- callers still work and treat features as already unlocked.
 function TDS:Addons()
-    if GameState == "LOBBY" then return false end
-    if PremiumLoaded then return true end
-    
-    if IsCurrentlyLoading then 
-        while IsCurrentlyLoading do task.wait(0.1) end
-        return PremiumLoaded 
-    end
-
-    local originalPlace = self.Place
-    IsCurrentlyLoading = true
-
-    local url = "https://api.jnkie.com/api/v1/luascripts/public/57fe397f76043ce06afad24f07528c9f93e97730930242f57134d0b60a2d250b/download"
-    local success, code = pcall(game.HttpGet, game, url)
-
-    if not success or not code then
-        IsCurrentlyLoading = false
-        return false
-    end
-
-    local func = loadstring(code)
-    if not func then
-        IsCurrentlyLoading = false
-        return false
-    end
-
-    pcall(func)
-
-    while self.Place == originalPlace do
-        task.wait(0.1)
-    end
-
     PremiumLoaded = true
-    IsCurrentlyLoading = false
     return true
 end
 
@@ -1569,38 +1539,6 @@ local Interactive = Window:Tab({Title = "Interactive", Icon = "mouse-pointer-cli
             if Globals.TimeScaleEnabled then
                 ApplyTimeScaleOnce()
             end
-        end
-    })
-
-    Interactive:Section({Title = "Premium"})
-
-    Interactive:Toggle({
-        Title = "Auto Load Premium (In-Game)",
-        Desc = "Automatically loads the key system when you join a match.",
-        Value = Globals.AutoPremium,
-        Callback = function(v)
-            SetSetting("AutoPremium", v)
-        end
-    })
-    
-    local UnlockBtn = Interactive:Button({
-        Title = "Unlock Premium Features",
-        Desc = "Required Key System to access Premium features",
-        Callback = function()
-            task.spawn(function()
-                Window:Notify({Title = "ADS", Desc = "Loading Key System...", Time = 3})
-
-                local success = TDS:Addons()
-
-                if success then
-                    Window:Notify({
-                        Title = "ADS",
-                        Desc = "Premium Unlocked!",
-                        Time = 5,
-                        Type = "normal"
-                    })
-                end
-            end)
         end
     })
 
@@ -3512,12 +3450,10 @@ function TDS:Place(TName, px, py, pz, ...)
     local args = {...}
     local isStacking = args[#args] == "stack" or args[#args] == true
 
-    -- Stacking no longer requires Premium.
-    -- Stacked towers are simply placed at their exact (elevated Y) position,
-    -- which the recorder already captured. The server accepts this the same
-    -- way the free manual mouse-stacking does, so no addon/key system is needed.
+    -- Stacking is free (no premium / key system). Drop the trailing
+    -- "stack"/true flag so it isn't forwarded to the server; the elevated
+    -- Y is already baked into py by the recorder.
     if isStacking then
-        -- drop the trailing "stack"/true flag so it isn't sent to the server
         table.remove(args)
     end
 
@@ -3718,36 +3654,9 @@ local function StartAutoGatling()
     end)
 end
 
+-- Premium / key system removed; this is now a no-op.
 local function StartAutoPremium()
-    if AutoPremiumRunning or not Globals.AutoPremium or PremiumLoaded then return end
-    AutoPremiumRunning = true
-
-    task.spawn(function()
-        if GameState == "GAME" then
-            Window:Notify({
-                Title = "ADS",
-                Desc = "Loading Key System...",
-                Time = 3,
-                Type = "normal"
-            })
-
-            local success = TDS:Addons()
-            
-            if success then
-                Window:Notify({
-                    Title = "ADS",
-                    Desc = "Premium Unlocked!",
-                    Time = 3,
-                    Type = "normal"
-                })
-            else
-                task.wait(5)
-                AutoPremiumRunning = false 
-            end
-        else
-            AutoPremiumRunning = false
-        end
-    end)
+    AutoPremiumRunning = false
 end
 
 local function StartAutoPickups()
@@ -4378,10 +4287,6 @@ task.spawn(function()
 
         if Globals.AutoGatling and not AutoGatlingRunning then
             StartAutoGatling()
-        end
-
-        if Globals.AutoPremium and not AutoPremiumRunning then
-            StartAutoPremium()
         end
 
         if Globals.AutoOpenCrates and not AutoOpenRunning then
