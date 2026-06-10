@@ -1120,7 +1120,7 @@ local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Duxii
 
 local Window = Library:Window({
     Title = "Aether Hub",
-    Desc = "edited by tworst",
+    Desc = "your #1 hub",
     Theme = "Default",
     DiscordLink = "https://discord.gg/aetherhub",
     Icon = 99432006374500,
@@ -4629,6 +4629,172 @@ do
                     TimeLbl:SetTitle("Time Running: " .. FmtTime(elapsed))
                 end)
 
+                task.wait(1)
+            end
+        end)
+
+        -- ===== Webhook tab (separate left tab, like "Stats") =====
+        local WHTab = StatsWindow:Tab({ Title = "Webhook", Icon = "webhook" })
+        WHTab:Section({ Title = "Discord Webhook" })
+
+        -- local webhook state (defaults from the main hub's saved settings)
+        local WH = {
+            Url = (Globals and Globals.WebhookURL) or "",
+            Auto = false,
+        }
+
+        WHTab:Textbox({
+            Title = "Webhook URL:",
+            Desc = "Where match summaries are sent",
+            Placeholder = "https://discord.com/api/webhooks/...",
+            Value = WH.Url,
+            ClearTextOnFocus = true,
+            Callback = function(value)
+                WH.Url = value or ""
+            end
+        })
+
+        WHTab:Toggle({
+            Title = "Auto Send (per match)",
+            Desc = "Send a summary automatically when each match ends",
+            Value = WH.Auto,
+            Callback = function(v)
+                WH.Auto = v
+            end
+        })
+
+        -- small number formatter (local to this tab)
+        local function WHNum(n)
+            n = math.floor(tonumber(n) or 0)
+            local s = tostring(n)
+            local out = s:reverse():gsub("(%d%d%d)", "%1,"):reverse()
+            out = out:gsub("^,", "")
+            return out
+        end
+
+        -- build the embed payload for a given match-rewards table
+        local function BuildPayload(match)
+            local statusColor = 3066993            -- green (win)
+            if match.Status == "LOSS" then
+                statusColor = 15158332             -- red
+            elseif match.Status == "UNKNOWN" then
+                statusColor = 9807270              -- gray
+            end
+
+            -- rewards gained THIS match
+            local rewardLines = {
+                "Coins: **" .. WHNum(match.Coins) .. "**",
+                "Gems: **" .. WHNum(match.Gems) .. "**",
+                "XP: **" .. WHNum(match.XP) .. "**",
+            }
+            if match.Others and #match.Others > 0 then
+                for _, item in ipairs(match.Others) do
+                    table.insert(rewardLines, (item.Name or "Item") .. ": **" .. tostring(item.Amount) .. "**")
+                end
+            end
+
+            -- session summary (totals since execution)
+            local elapsed = os.clock() - StartClock
+            local summaryLines = {
+                "Total Coins: **" .. WHNum(Totals.Coins) .. "**",
+                "Total Gems: **" .. WHNum(Totals.Gems) .. "**",
+                "Total XP: **" .. WHNum(Totals.XP) .. "**",
+                "Total Timescale Tickets: **" .. WHNum(Totals.Tickets) .. "**",
+                "Runtime: **" .. FmtTime(elapsed) .. "**",
+            }
+
+            return {
+                username = "TDS AutoStrat",
+                embeds = {{
+                    title = "Match Ended - " .. tostring(match.Status),
+                    color = statusColor,
+                    fields = {
+                        { name = "Result", value = string.format("Status: **%s**\nWave: **%d**\nTime: **%s**", tostring(match.Status), match.Wave or 0, match.Time or "00:00"), inline = false },
+                        { name = "Rewards Gained", value = table.concat(rewardLines, "\n"), inline = true },
+                        { name = "Session Summary", value = table.concat(summaryLines, "\n"), inline = true },
+                    },
+                    footer = { text = "Aether Hub - Session Stats" },
+                }}
+            }
+        end
+
+        local function SendPayload(payload)
+            if not SendRequest then return false, "no http function" end
+            if not WH.Url or WH.Url == "" then return false, "empty url" end
+            local ok, res = pcall(function()
+                return SendRequest({
+                    Url = WH.Url,
+                    Method = "POST",
+                    Headers = { ["Content-Type"] = "application/json" },
+                    Body = HttpService:JSONEncode(payload)
+                })
+            end)
+            if ok and res and res.StatusCode and res.StatusCode >= 200 and res.StatusCode < 300 then
+                return true
+            end
+            return false, (ok and res and res.StatusCode) or res
+        end
+
+        WHTab:Button({
+            Title = "Send Summary Now",
+            Desc = "Send the current match + session summary",
+            Callback = function()
+                if not WH.Url or WH.Url == "" then
+                    return Window:Notify({ Title = "Error", Desc = "Webhook URL is empty!", Time = 3, Type = "error" })
+                end
+                local match = GetAllRewards()
+                local ok, err = SendPayload(BuildPayload(match))
+                if ok then
+                    Window:Notify({ Title = "Webhook", Desc = "Summary sent!", Time = 3, Type = "normal" })
+                else
+                    Window:Notify({ Title = "Error", Desc = "Failed to send (" .. tostring(err) .. ")", Time = 5, Type = "error" })
+                end
+            end
+        })
+
+        WHTab:Button({
+            Title = "Test Webhook",
+            Desc = "Send a test message",
+            Callback = function()
+                if not WH.Url or WH.Url == "" then
+                    return Window:Notify({ Title = "Error", Desc = "Webhook URL is empty!", Time = 3, Type = "error" })
+                end
+                local ok, err = SendPayload({ content = "Webhook Test - Aether Hub Session Stats" })
+                if ok then
+                    Window:Notify({ Title = "Webhook", Desc = "Test sent successfully!", Time = 3, Type = "normal" })
+                else
+                    Window:Notify({ Title = "Error", Desc = "Invalid webhook (" .. tostring(err) .. ")", Time = 5, Type = "error" })
+                end
+            end
+        })
+
+        -- auto-send watcher: fires once per match end while Auto is on
+        task.spawn(function()
+            local function MatchOver()
+                local ok, over = pcall(function()
+                    local root = PlayerGui:FindFirstChild("ReactGameNewRewards")
+                    local frame = root and root:FindFirstChild("Frame")
+                    if not (frame and frame.Visible) then return false end
+                    local g = frame:FindFirstChild("gameOver")
+                    if not (g and g.Visible) then return false end
+                    local r = g:FindFirstChild("RewardsScreen")
+                    return r ~= nil and r.Visible == true
+                end)
+                return ok and over == true
+            end
+
+            local sentThisMatch = false
+            while true do
+                if MatchOver() then
+                    if WH.Auto and not sentThisMatch then
+                        sentThisMatch = true
+                        task.wait(1.5)   -- let the rewards screen fully populate
+                        local match = GetAllRewards()
+                        pcall(function() SendPayload(BuildPayload(match)) end)
+                    end
+                else
+                    sentThisMatch = false   -- reset for the next match
+                end
                 task.wait(1)
             end
         end)
