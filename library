@@ -1120,7 +1120,7 @@ local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Duxii
 
 local Window = Library:Window({
     Title = "Aether Hub",
-    Desc = "your #1 hub",
+    Desc = "edited by tworst",
     Theme = "Default",
     DiscordLink = "https://discord.gg/aetherhub",
     Icon = 99432006374500,
@@ -2231,7 +2231,7 @@ end
 
 Window:Line()
 
-local RecorderInit = loadstring(game:HttpGet("https://raw.githubusercontent.com/DuxiiT/auto-strat/refs/heads/main/Sources/Recorder.lua"))()
+local RecorderInit = loadstring(game:HttpGet("https://raw.githubusercontent.com/tworstatals/tds_customlib-restart/refs/heads/main/recorder"))()
 RecorderInit({
     Window = Window,
     ReplicatedStorage = ReplicatedStorage,
@@ -3522,6 +3522,15 @@ function TDS:Reset()
     self.LastVoteSkipTarget = 0
 end
 
+-- Clears the strategy logger (crash-proof).
+function TDS:ClearLog()
+    pcall(function()
+        if Logger and Logger.Clear then
+            Logger:Clear()
+        end
+    end)
+end
+
 function TDS:Place(TName, px, py, pz, ...)
     local args = {...}
     local isStacking = args[#args] == "stack" or args[#args] == true
@@ -4265,13 +4274,7 @@ local function StartAutoMercenary()
         AutoMercenaryBaseRunning = false
     end)
 end
-function TDS:ClearLog()
-	pcall(function()
-		if Logger and Logger.Clear then
-			Logger:Clear()
-		end
-	end)
-end
+
 local function StartAutoMilitary()
     if not Globals.AutoMilitary then return end
 
