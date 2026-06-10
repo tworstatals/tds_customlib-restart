@@ -1120,7 +1120,7 @@ local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Duxii
 
 local Window = Library:Window({
     Title = "Aether Hub",
-    Desc = "edited by tworst",
+    Desc = "your #1 hub",
     Theme = "Default",
     DiscordLink = "https://discord.gg/aetherhub",
     Icon = 99432006374500,
@@ -2231,7 +2231,7 @@ end
 
 Window:Line()
 
-local RecorderInit = loadstring(game:HttpGet("https://raw.githubusercontent.com/tworstatals/tds_customlib-restart/refs/heads/main/recorder"))()
+local RecorderInit = loadstring(game:HttpGet("https://raw.githubusercontent.com/DuxiiT/auto-strat/refs/heads/main/Sources/Recorder.lua"))()
 RecorderInit({
     Window = Window,
     ReplicatedStorage = ReplicatedStorage,
@@ -3481,29 +3481,6 @@ end
 function TDS:WaitForWave(targetWave)
     if GameState ~= "GAME" then return false end
     while self:GetWave() < targetWave do
-        if self:IsMatchOver() then return false end   -- bail if match ended early
-        task.wait(0.5)
-    end
-    return true
-end
-
--- True once the end-of-match rewards screen (win or loss) is showing.
-function TDS:IsMatchOver()
-    local ok, over = pcall(function()
-        local root = PlayerGui:FindFirstChild("ReactGameNewRewards")
-        local frame = root and root:FindFirstChild("Frame")
-        if not (frame and frame.Visible) then return false end
-        local gameOver = frame:FindFirstChild("gameOver")
-        if not (gameOver and gameOver.Visible) then return false end
-        local rewards = gameOver:FindFirstChild("RewardsScreen")
-        return rewards ~= nil and rewards.Visible == true
-    end)
-    return ok and over == true
-end
-
--- Blocks until the match ends (win or loss). Returns true once over.
-function TDS:WaitForMatchEnd()
-    while not self:IsMatchOver() do
         task.wait(0.5)
     end
     return true
