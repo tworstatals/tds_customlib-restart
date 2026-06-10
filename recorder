@@ -954,9 +954,72 @@ TDS:Mode("%s")%s
         end
         local function gui_clear()
             for _, c in ipairs(logFrame:GetChildren()) do
-                if c:IsA("TextLabel") then c:Destroy() end
+                if c:IsA("TextLabel") or c:IsA("Frame") then c:Destroy() end
             end
             logOrder = 0
+        end
+
+        -- clipboard helper (executor-dependent)
+        local function set_clipboard(text)
+            local fn = setclipboard or toclipboard or (Clipboard and Clipboard.set) or writeclipboard
+            if fn then
+                local ok = pcall(fn, text)
+                return ok
+            end
+            return false
+        end
+
+        -- a log row WITH a "copy coordinates" button on the right
+        local function gui_log_copy(msg, copyText)
+            logOrder = logOrder + 1
+            local row = Instance.new("Frame")
+            row.BackgroundTransparency = 1
+            row.Size = UDim2.new(1, 0, 0, 18)
+            row.AutomaticSize = Enum.AutomaticSize.Y
+            row.LayoutOrder = logOrder
+            row.Parent = logFrame
+
+            local lbl = Instance.new("TextLabel")
+            lbl.BackgroundTransparency = 1
+            lbl.Position = UDim2.new(0, 0, 0, 0)
+            lbl.Size = UDim2.new(1, -110, 1, 0)
+            lbl.AutomaticSize = Enum.AutomaticSize.Y
+            lbl.Font = Enum.Font.Code
+            lbl.TextSize = 12
+            lbl.TextWrapped = true
+            lbl.TextXAlignment = Enum.TextXAlignment.Left
+            lbl.TextYAlignment = Enum.TextYAlignment.Top
+            lbl.TextColor3 = Color3.fromRGB(220, 220, 230)
+            lbl.Text = tostring(msg)
+            lbl.Parent = row
+
+            local copyBtn = Instance.new("TextButton")
+            copyBtn.AnchorPoint = Vector2.new(1, 0)
+            copyBtn.Position = UDim2.new(1, 0, 0, 0)
+            copyBtn.Size = UDim2.new(0, 104, 0, 16)
+            copyBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+            copyBtn.Text = "copy coordinates"
+            copyBtn.Font = Enum.Font.Gotham
+            copyBtn.TextSize = 10
+            copyBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+            copyBtn.Parent = row
+            local cbc = Instance.new("UICorner") cbc.CornerRadius = UDim.new(0, 4) cbc.Parent = copyBtn
+
+            copyBtn.MouseButton1Click:Connect(function()
+                local ok = set_clipboard(copyText)
+                copyBtn.Text = ok and "copied!" or "no clipboard"
+                copyBtn.BackgroundColor3 = ok and Color3.fromRGB(35, 120, 60) or Color3.fromRGB(150, 50, 50)
+                task.delay(1.2, function()
+                    if copyBtn and copyBtn.Parent then
+                        copyBtn.Text = "copy coordinates"
+                        copyBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+                    end
+                end)
+            end)
+
+            task.defer(function()
+                logFrame.CanvasPosition = Vector2.new(0, logFrame.AbsoluteCanvasSize.Y)
+            end)
         end
 
         -- buttons row (START / STOP / CLEAR)
@@ -1009,6 +1072,7 @@ TDS:Mode("%s")%s
         -- expose menu interface
         local obj = {}
         function obj.Log(msg) pcall(gui_log, msg) end
+        function obj.LogCopy(msg, copyText) pcall(gui_log_copy, msg, copyText) end
         function obj.Clear() pcall(gui_clear) end
         function obj.Show() gui.Enabled = true root.Visible = true end
         function obj.Hide() gui.Enabled = false end
@@ -1096,7 +1160,13 @@ TDS:Mode("%s")%s
                         command = 'TDS:Place("' .. tower_name .. '", ' .. tostring(pos_x) .. ', ' .. tostring(pos_y) .. ', ' .. tostring(pos_z) .. ')'
                     end
                     record_action(command)
-                    log_line("Placed " .. tower_name .. " (Index: " .. my_index .. ")")
+                    -- log line WITH a "copy coordinates" button (copies x, y, z)
+                    local coords = tostring(pos_x) .. ", " .. tostring(pos_y) .. ", " .. tostring(pos_z)
+                    if menu and menu.LogCopy then
+                        menu.LogCopy("Placed " .. tower_name .. " (Index: " .. my_index .. ")", coords)
+                    else
+                        log_line("Placed " .. tower_name .. " (Index: " .. my_index .. ")")
+                    end
                 end))
 
                 table.insert(active_conns, towers_folder.ChildRemoved:Connect(function(tower)
