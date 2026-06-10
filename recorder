@@ -1671,6 +1671,17 @@ TDS:Mode("%s")%s
                     local owner_id = replicator:GetAttribute("OwnerId")
                     if owner_id and owner_id ~= local_player.UserId then return end
                     if replicator:GetAttribute("Hologram") == true then return end
+
+                    -- Only register a placement once we've CONFIRMED the tower
+                    -- actually persisted. Failed / rejected / transient placement
+                    -- attempts spawn a tower that is removed almost immediately;
+                    -- waiting and re-checking filters those out so we don't record
+                    -- duplicate ghost placements.
+                    task.wait(0.35)
+                    if tower.Parent ~= towers_folder then return end          -- got removed -> was a failed attempt
+                    if replicator:GetAttribute("Hologram") == true then return end
+                    if spawned_towers[tower] then return end                  -- already counted
+
                     tower_count = tower_count + 1
                     local my_index = tower_count
                     spawned_towers[tower] = my_index
