@@ -1215,12 +1215,9 @@ TDS:Mode("%s")%s
                         pos_x, pos_y, pos_z = p.X, p.Y, p.Z
                     end
 
-                    local command
-                    if Globals.StackEnabled then
-                        command = 'TDS:Place("' .. tower_name .. '", ' .. tostring(pos_x) .. ', ' .. tostring(pos_y) .. ', ' .. tostring(pos_z) .. ', true)'
-                    else
-                        command = 'TDS:Place("' .. tower_name .. '", ' .. tostring(pos_x) .. ', ' .. tostring(pos_y) .. ', ' .. tostring(pos_z) .. ')'
-                    end
+                    -- Always record placements WITH the stacker flag (, true) so any
+                    -- tower can be re-placed at the exact same spot via stacking.
+                    local command = 'TDS:Place("' .. tower_name .. '", ' .. tostring(pos_x) .. ', ' .. tostring(pos_y) .. ', ' .. tostring(pos_z) .. ', true)'
                     record_action(command)
                     -- log line WITH a button that opens an action popup (copies/repeats the full command)
                     if menu and menu.LogCopy then
