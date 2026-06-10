@@ -3481,6 +3481,29 @@ end
 function TDS:WaitForWave(targetWave)
     if GameState ~= "GAME" then return false end
     while self:GetWave() < targetWave do
+        if self:IsMatchOver() then return false end   -- bail if match ended early
+        task.wait(0.5)
+    end
+    return true
+end
+
+-- True once the end-of-match rewards screen (win or loss) is showing.
+function TDS:IsMatchOver()
+    local ok, over = pcall(function()
+        local root = PlayerGui:FindFirstChild("ReactGameNewRewards")
+        local frame = root and root:FindFirstChild("Frame")
+        if not (frame and frame.Visible) then return false end
+        local gameOver = frame:FindFirstChild("gameOver")
+        if not (gameOver and gameOver.Visible) then return false end
+        local rewards = gameOver:FindFirstChild("RewardsScreen")
+        return rewards ~= nil and rewards.Visible == true
+    end)
+    return ok and over == true
+end
+
+-- Blocks until the match ends (win or loss). Returns true once over.
+function TDS:WaitForMatchEnd()
+    while not self:IsMatchOver() do
         task.wait(0.5)
     end
     return true
