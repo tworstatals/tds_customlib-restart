@@ -899,6 +899,45 @@ TDS:Mode("%s")%s
         return ok
     end
 
+    -- Upgrade a single tower by its recorder index ONCE. The namecall hook
+    -- auto-records TDS:Upgrade(idx).
+    local function upgrade_index(n)
+        if not RemoteFunc then return false end
+        local target
+        for tower, idx in pairs(spawned_towers) do
+            if idx == n then target = tower break end
+        end
+        if not target then
+            if menu then menu.Log("No tower with index " .. tostring(n)) end
+            return false
+        end
+        local ok = pcall(function()
+            RemoteFunc:InvokeServer("Troops", "Upgrade", "Set", { Troop = target })
+        end)
+        return ok
+    end
+
+    -- Upgrade ALL of your towers of a given type (name) ONCE each. Each fire is
+    -- auto-recorded by the namecall hook.
+    local function upgrade_by_type(towerName)
+        if not RemoteFunc or not towerName or towerName == "" then return 0 end
+        local count = 0
+        local folder = workspace_ref:FindFirstChild("Towers")
+        if not folder then return 0 end
+        for _, tower in ipairs(folder:GetChildren()) do
+            local rep = tower:FindFirstChild("TowerReplicator")
+            if rep and rep:GetAttribute("OwnerId") == local_player.UserId
+                and rep:GetAttribute("Name") == towerName then
+                pcall(function()
+                    RemoteFunc:InvokeServer("Troops", "Upgrade", "Set", { Troop = tower })
+                end)
+                count += 1
+                task.wait(0.15)
+            end
+        end
+        return count
+    end
+
     -- ===== build the popup recorder menu (custom ScreenGui) =====
     local function build_menu()
         local parent = get_gui_parent()
@@ -1214,28 +1253,24 @@ TDS:Mode("%s")%s
         local stopBtn  = mkBtn("STOP", 127, 105, Color3.fromRGB(150, 50, 50))
         local clearBtn = mkBtn("CLEAR", 244, 106, Color3.fromRGB(60, 60, 80))
 
-        -- action buttons row (instead of a typing console)
-        local sellActBtn = Instance.new("TextButton")
-        sellActBtn.Position = UDim2.new(0, 10, 1, -38)
-        sellActBtn.Size = UDim2.new(0.5, -15, 0, 28)
-        sellActBtn.BackgroundColor3 = Color3.fromRGB(150, 70, 40)
-        sellActBtn.Text = "Sell"
-        sellActBtn.Font = Enum.Font.GothamBold
-        sellActBtn.TextSize = 12
-        sellActBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-        sellActBtn.Parent = root
-        local sac = Instance.new("UICorner") sac.CornerRadius = UDim.new(0, 6) sac.Parent = sellActBtn
-
-        local placeActBtn = Instance.new("TextButton")
-        placeActBtn.Position = UDim2.new(0.5, 5, 1, -38)
-        placeActBtn.Size = UDim2.new(0.5, -15, 0, 28)
-        placeActBtn.BackgroundColor3 = Color3.fromRGB(108, 30, 210)
-        placeActBtn.Text = "Place"
-        placeActBtn.Font = Enum.Font.GothamBold
-        placeActBtn.TextSize = 12
-        placeActBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-        placeActBtn.Parent = root
-        local pac = Instance.new("UICorner") pac.CornerRadius = UDim.new(0, 6) pac.Parent = placeActBtn
+        -- action buttons row (instead of a typing console): Sell / Place / Upgrade
+        local function mkActBtn(text, xScale, xOff, wScale, wOff, color)
+            local b = Instance.new("TextButton")
+            b.Position = UDim2.new(xScale, xOff, 1, -38)
+            b.Size = UDim2.new(wScale, wOff, 0, 28)
+            b.BackgroundColor3 = color
+            b.Text = text
+            b.Font = Enum.Font.GothamBold
+            b.TextSize = 12
+            b.TextColor3 = Color3.fromRGB(255, 255, 255)
+            b.Parent = root
+            local c = Instance.new("UICorner") c.CornerRadius = UDim.new(0, 6) c.Parent = b
+            return b
+        end
+        -- three equal-ish columns
+        local sellActBtn    = mkActBtn("Sell",    0,    10, 1/3, -14, Color3.fromRGB(150, 70, 40))
+        local placeActBtn   = mkActBtn("Place",   1/3,   2, 1/3, -4,  Color3.fromRGB(108, 30, 210))
+        local upgradeActBtn = mkActBtn("Upgrade", 2/3,  -2, 1/3, -8,  Color3.fromRGB(40, 110, 130))
 
         -- popup helper to build small dialogs over the menu
         local actionDialog = nil
@@ -1428,8 +1463,153 @@ TDS:Mode("%s")%s
             end)
         end
 
+        -- UPGRADE dialog: Single (by index) or Multi (by tower type)
+        local function open_upgrade_dialog()
+            local d = new_dialog("Upgrade tower", 180)
+            local mode = "Single"   -- "Single" or "Multi"
+
+            -- mode toggle buttons
+            local singleBtn = Instance.new("TextButton")
+            singleBtn.Position = UDim2.new(0, 10, 0, 34)
+            singleBtn.Size = UDim2.new(0.5, -14, 0, 26)
+            singleBtn.Text = "Single (index)"
+            singleBtn.Font = Enum.Font.Gotham
+            singleBtn.TextSize = 11
+            singleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+            singleBtn.ZIndex = 72
+            singleBtn.Parent = d
+            local sgc = Instance.new("UICorner") sgc.CornerRadius = UDim.new(0, 6) sgc.Parent = singleBtn
+
+            local multiBtn = Instance.new("TextButton")
+            multiBtn.Position = UDim2.new(0.5, 4, 0, 34)
+            multiBtn.Size = UDim2.new(0.5, -14, 0, 26)
+            multiBtn.Text = "Multi (type)"
+            multiBtn.Font = Enum.Font.Gotham
+            multiBtn.TextSize = 11
+            multiBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+            multiBtn.ZIndex = 72
+            multiBtn.Parent = d
+            local mgc = Instance.new("UICorner") mgc.CornerRadius = UDim.new(0, 6) mgc.Parent = multiBtn
+
+            -- SINGLE: index box
+            local idxBox = Instance.new("TextBox")
+            idxBox.Position = UDim2.new(0, 10, 0, 70)
+            idxBox.Size = UDim2.new(1, -20, 0, 28)
+            idxBox.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
+            idxBox.PlaceholderText = "index (e.g. 1)"
+            idxBox.Text = ""
+            idxBox.Font = Enum.Font.Code
+            idxBox.TextSize = 13
+            idxBox.TextColor3 = Color3.fromRGB(230, 230, 240)
+            idxBox.ClearTextOnFocus = false
+            idxBox.ZIndex = 72
+            idxBox.Parent = d
+            local ibc = Instance.new("UICorner") ibc.CornerRadius = UDim.new(0, 6) ibc.Parent = idxBox
+
+            -- MULTI: tower-type dropdown
+            local towers = get_equipped_towers()
+            if #towers == 0 then towers = {"None"} end
+            local selectedType = towers[1]
+
+            local typeBtn = Instance.new("TextButton")
+            typeBtn.Position = UDim2.new(0, 10, 0, 70)
+            typeBtn.Size = UDim2.new(1, -20, 0, 28)
+            typeBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 60)
+            typeBtn.Text = "Tower: " .. tostring(selectedType) .. "  ▼"
+            typeBtn.Font = Enum.Font.Gotham
+            typeBtn.TextSize = 12
+            typeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+            typeBtn.ZIndex = 72
+            typeBtn.Visible = false
+            typeBtn.Parent = d
+            local tyc = Instance.new("UICorner") tyc.CornerRadius = UDim.new(0, 6) tyc.Parent = typeBtn
+
+            local listFrame
+            local function close_list() if listFrame then listFrame:Destroy() listFrame = nil end end
+            typeBtn.MouseButton1Click:Connect(function()
+                if listFrame then close_list() return end
+                listFrame = Instance.new("Frame")
+                listFrame.Size = UDim2.new(1, -20, 0, math.min(#towers, 5) * 24 + 4)
+                listFrame.Position = UDim2.new(0, 10, 0, 98)
+                listFrame.BackgroundColor3 = Color3.fromRGB(24, 24, 31)
+                listFrame.BorderSizePixel = 0
+                listFrame.ZIndex = 90
+                listFrame.Parent = d
+                local lfc = Instance.new("UICorner") lfc.CornerRadius = UDim.new(0, 6) lfc.Parent = listFrame
+                local lfs = Instance.new("UIStroke") lfs.Color = Color3.fromRGB(108, 30, 210) lfs.Parent = listFrame
+                local sf = Instance.new("ScrollingFrame")
+                sf.Size = UDim2.new(1, -4, 1, -4)
+                sf.Position = UDim2.new(0, 2, 0, 2)
+                sf.BackgroundTransparency = 1
+                sf.BorderSizePixel = 0
+                sf.ScrollBarThickness = 3
+                sf.CanvasSize = UDim2.new(0, 0, 0, #towers * 24)
+                sf.ZIndex = 91
+                sf.Parent = listFrame
+                local ll = Instance.new("UIListLayout") ll.Padding = UDim.new(0, 2) ll.Parent = sf
+                for _, name in ipairs(towers) do
+                    local item = Instance.new("TextButton")
+                    item.Size = UDim2.new(1, 0, 0, 22)
+                    item.BackgroundColor3 = Color3.fromRGB(40, 40, 52)
+                    item.Text = name
+                    item.Font = Enum.Font.Gotham
+                    item.TextSize = 12
+                    item.TextColor3 = Color3.fromRGB(255, 255, 255)
+                    item.ZIndex = 92
+                    item.Parent = sf
+                    local ic2 = Instance.new("UICorner") ic2.CornerRadius = UDim.new(0, 4) ic2.Parent = item
+                    item.MouseButton1Click:Connect(function()
+                        selectedType = name
+                        typeBtn.Text = "Tower: " .. tostring(selectedType) .. "  ▼"
+                        close_list()
+                    end)
+                end
+            end)
+
+            local function set_mode(m)
+                mode = m
+                close_list()
+                idxBox.Visible = (m == "Single")
+                typeBtn.Visible = (m == "Multi")
+                singleBtn.BackgroundColor3 = (m == "Single") and Color3.fromRGB(40, 110, 130) or Color3.fromRGB(45, 45, 60)
+                multiBtn.BackgroundColor3  = (m == "Multi")  and Color3.fromRGB(40, 110, 130) or Color3.fromRGB(45, 45, 60)
+            end
+            singleBtn.MouseButton1Click:Connect(function() set_mode("Single") end)
+            multiBtn.MouseButton1Click:Connect(function() set_mode("Multi") end)
+            set_mode("Single")
+
+            local go = Instance.new("TextButton")
+            go.Position = UDim2.new(0, 10, 0, 138)
+            go.Size = UDim2.new(1, -20, 0, 30)
+            go.BackgroundColor3 = Color3.fromRGB(40, 110, 130)
+            go.Text = "Upgrade"
+            go.Font = Enum.Font.GothamBold
+            go.TextSize = 12
+            go.TextColor3 = Color3.fromRGB(255, 255, 255)
+            go.ZIndex = 72
+            go.Parent = d
+            local gc = Instance.new("UICorner") gc.CornerRadius = UDim.new(0, 6) gc.Parent = go
+
+            go.MouseButton1Click:Connect(function()
+                if mode == "Single" then
+                    local n = math.floor(tonumber(idxBox.Text) or 0)
+                    if n >= 1 then
+                        upgrade_index(n)        -- fires once; auto-recorded
+                        close_dialog()
+                    end
+                else
+                    if selectedType and selectedType ~= "None" then
+                        local c = upgrade_by_type(selectedType)
+                        if menu then menu.Log("Upgraded " .. c .. "x " .. selectedType) end
+                        close_dialog()
+                    end
+                end
+            end)
+        end
+
         sellActBtn.MouseButton1Click:Connect(open_sell_dialog)
         placeActBtn.MouseButton1Click:Connect(open_place_dialog)
+        upgradeActBtn.MouseButton1Click:Connect(open_upgrade_dialog)
 
         -- expose menu interface
         local obj = {}
