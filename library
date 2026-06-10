@@ -1120,7 +1120,7 @@ local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Duxii
 
 local Window = Library:Window({
     Title = "Aether Hub",
-    Desc = "your #1 hub",
+    Desc = "edited by tworst",
     Theme = "Default",
     DiscordLink = "https://discord.gg/aetherhub",
     Icon = 99432006374500,
