@@ -214,6 +214,8 @@ local DefaultSettings = {
     StreamerName = "",
     tagName = "None",
     Modifiers = {},
+    StatsWebhookURL = "",
+    StatsWebhookAuto = false,
 }
 
 local TimeScaleValues = {0.5, 1, 1.5, 2}
@@ -3425,6 +3427,29 @@ end
 function TDS:WaitForWave(targetWave)
     if GameState ~= "GAME" then return false end
     while self:GetWave() < targetWave do
+        if self:IsMatchOver() then return false end   -- bail if match ended early (died/lost)
+        task.wait(0.5)
+    end
+    return true
+end
+
+-- True once the end-of-match rewards screen (win or loss) is showing.
+function TDS:IsMatchOver()
+    local ok, over = pcall(function()
+        local root = PlayerGui:FindFirstChild("ReactGameNewRewards")
+        local frame = root and root:FindFirstChild("Frame")
+        if not (frame and frame.Visible) then return false end
+        local gameOver = frame:FindFirstChild("gameOver")
+        if not (gameOver and gameOver.Visible) then return false end
+        local rewards = gameOver:FindFirstChild("RewardsScreen")
+        return rewards ~= nil and rewards.Visible == true
+    end)
+    return ok and over == true
+end
+
+-- Blocks until the match ends (win or loss). Returns true once over.
+function TDS:WaitForMatchEnd()
+    while not self:IsMatchOver() do
         task.wait(0.5)
     end
     return true
@@ -4466,7 +4491,7 @@ do
             end
         end)
 
-        local Tab = StatsWindow:Tab({ Title = "Stats", Icon = "bar-chart-3" })
+        local Tab = StatsWindow:Tab({ Title = "📊 Stats", Icon = "bar-chart-3" })
         Tab:Section({ Title = "Totals (since start)" })
 
         local CoinsLbl   = Tab:Label({ Title = "Total Coins: 0", Desc = "" })
@@ -4542,32 +4567,40 @@ do
         end)
 
         -- ===== Webhook tab (separate left tab, like "Stats") =====
-        local WHTab = StatsWindow:Tab({ Title = "Webhook", Icon = "webhook" })
+        local WHTab = StatsWindow:Tab({ Title = "🔗 Webhook", Icon = "webhook" })
         WHTab:Section({ Title = "Discord Webhook" })
 
-        -- local webhook state (defaults from the main hub's saved settings)
+        -- webhook state backed by the persistent config (auto-saves to ADS_Config.json)
+        -- falls back to the main hub's WebhookURL the first time if no stats url is set
+        if (not Globals.StatsWebhookURL or Globals.StatsWebhookURL == "")
+            and Globals.WebhookURL and Globals.WebhookURL ~= "" then
+            SetSetting("StatsWebhookURL", Globals.WebhookURL)
+        end
+
         local WH = {
-            Url = (Globals and Globals.WebhookURL) or "",
-            Auto = false,
+            Url = Globals.StatsWebhookURL or "",
+            Auto = Globals.StatsWebhookAuto or false,
         }
 
         WHTab:Textbox({
             Title = "Webhook URL:",
-            Desc = "Where match summaries are sent",
+            Desc = "Where match summaries are sent (auto-saved)",
             Placeholder = "https://discord.com/api/webhooks/...",
             Value = WH.Url,
             ClearTextOnFocus = true,
             Callback = function(value)
                 WH.Url = value or ""
+                SetSetting("StatsWebhookURL", WH.Url)   -- persist
             end
         })
 
         WHTab:Toggle({
             Title = "Auto Send (per match)",
-            Desc = "Send a summary automatically when each match ends",
+            Desc = "Send a summary automatically when each match ends (auto-saved)",
             Value = WH.Auto,
             Callback = function(v)
                 WH.Auto = v
+                SetSetting("StatsWebhookAuto", v)       -- persist
             end
         })
 
