@@ -1,18 +1,45 @@
 local Globals = getgenv()
 
-return function(ctx)
-    if not ctx or not ctx.Window then
-        return
-    end
+local function init_recorder(ctx)
+    -- Recorder is STANDALONE: it does NOT require the library or its UI.
+    -- ctx is optional. When the library loads us it passes a context (Window,
+    -- GameState, etc.); when run on our own we fall back to sane defaults.
+    if Globals.__recorder_running then return end   -- never init twice
+    Globals.__recorder_running = true
+    ctx = ctx or {}
 
-    local Window = ctx.Window
+    local Window = ctx.Window   -- may be nil (standalone mode)
     local replicated_storage = ctx.ReplicatedStorage or game:GetService("ReplicatedStorage")
     local http_service = ctx.HttpService or game:GetService("HttpService")
-    local game_state = ctx.GameState or "UNKNOWN"
+    local game_state = ctx.GameState
     local workspace_ref = ctx.workspace or workspace
     local players_service = game:GetService("Players")
     local local_player = ctx.LocalPlayer or players_service.LocalPlayer or players_service.PlayerAdded:Wait()
     Globals.record_strat = Globals.record_strat or false
+
+    -- detect game state ourselves if the library didn't tell us
+    if game_state == nil then
+        local pg = local_player:FindFirstChild("PlayerGui")
+        if pg and pg:FindFirstChild("ReactUniversalHotbar") then
+            game_state = "GAME"
+        elseif workspace_ref:FindFirstChild("Towers") then
+            game_state = "GAME"
+        else
+            game_state = "UNKNOWN"
+        end
+    end
+
+    -- safe notify: use the library's Window:Notify if present, else log to menu
+    local menu_ref_holder = {}   -- filled with the menu later
+    local function notify(title, desc)
+        if Window and Window.Notify then
+            pcall(function()
+                Window:Notify({ Title = title, Desc = desc, Time = 3, Type = "normal" })
+            end)
+        elseif menu_ref_holder.menu then
+            menu_ref_holder.menu.Log("[" .. tostring(title) .. "] " .. tostring(desc))
+        end
+    end
 
     local spawned_towers = {}
     local tower_count = 0
@@ -777,12 +804,7 @@ TDS:Mode("%s")%s
             writefile("Strat.txt", config_header)
         end
 
-        Window:Notify({
-            Title = "ADS",
-            Desc = "Recorder has started, place towers or type commands in the menu.",
-            Time = 3,
-            Type = "normal"
-        })
+        notify("ADS", "Recorder has started, place towers or type commands in the menu.")
     end
 
     stop_recording = function()
@@ -790,12 +812,7 @@ TDS:Mode("%s")%s
         if has_hook and menu then
             menu.Clear()
             menu.Log("Strategy saved to workspace folder 'Strat.txt'")
-            Window:Notify({
-                Title = "ADS",
-                Desc = "Recording saved! Check your workspace folder for Strat.txt",
-                Time = 3,
-                Type = "normal"
-            })
+            notify("ADS", "Recording saved! Check your workspace folder for Strat.txt")
         end
     end
 
@@ -1693,8 +1710,6 @@ TDS:Mode("%s")%s
         return obj
     end
 
-    -- the Recorder tab now only has the "Open Recorder" button
-    local RecorderTab = Window:Tab({Title = "Recorder", Icon = "camera"})
     do
         -- a lightweight Recorder shim so log_line / handlers can log to the popup
         Recorder = {
@@ -1703,14 +1718,56 @@ TDS:Mode("%s")%s
         }
         Globals.log_clear = function() if menu then menu.Clear() end end
 
-        RecorderTab:Button({
-            Title = "Open Recorder",
-            Desc = "Opens the strat recorder menu",
-            Callback = function()
-                if not menu then menu = build_menu() end
-                menu.Show()
+        -- open (creating if needed) the recorder menu
+        local function open_recorder()
+            if not menu then
+                menu = build_menu()
+                menu_ref_holder.menu = menu   -- so notify() can fall back to it
             end
-        })
+            menu.Show()
+        end
+        -- expose a global so it can be opened from anywhere / standalone
+        Globals.open_recorder = open_recorder
+
+        if Window and Window.Tab then
+            -- LIBRARY MODE: add an "Open Recorder" button to a tab in the hub
+            local RecorderTab = Window:Tab({ Title = "Recorder", Icon = "camera" })
+            RecorderTab:Button({
+                Title = "Open Recorder",
+                Desc = "Opens the strat recorder menu",
+                Callback = open_recorder,
+            })
+        else
+            -- STANDALONE MODE: no hub UI -> make our own small floating toggle
+            -- button, and open the menu right away.
+            pcall(function()
+                local parent = get_gui_parent()
+                local existing = parent:FindFirstChild("ADS_RecorderToggle")
+                if existing then existing:Destroy() end
+
+                local sg = Instance.new("ScreenGui")
+                sg.Name = "ADS_RecorderToggle"
+                sg.ResetOnSpawn = false
+                sg.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+                sg.DisplayOrder = 1000
+                sg.Parent = parent
+
+                local btn = Instance.new("TextButton")
+                btn.Size = UDim2.new(0, 130, 0, 32)
+                btn.Position = UDim2.new(0, 12, 0, 12)
+                btn.BackgroundColor3 = Color3.fromRGB(108, 30, 210)
+                btn.Text = "Open Recorder"
+                btn.Font = Enum.Font.GothamBold
+                btn.TextSize = 12
+                btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+                btn.Active = true
+                btn.Draggable = true
+                btn.Parent = sg
+                local bc = Instance.new("UICorner") bc.CornerRadius = UDim.new(0, 6) bc.Parent = btn
+                btn.MouseButton1Click:Connect(open_recorder)
+            end)
+            open_recorder()
+        end
 
         if game_state == "GAME" then
             local active_conns = {}
@@ -1795,4 +1852,26 @@ TDS:Mode("%s")%s
             end)
         end
     end
+end
+
+-- The library loads us and calls the returned function with a context:
+--   local RecorderInit = loadstring(game:HttpGet(".../recorder"))()
+--   RecorderInit({ Window = Window, ... })
+--
+-- A standalone user just runs it with no context:
+--   loadstring(game:HttpGet(".../recorder"))()
+-- so we auto-start once (guarded) when nobody calls us within a moment.
+if not Globals.__recorder_started then
+    Globals.__recorder_started = true
+    task.spawn(function()
+        task.wait(0.5)   -- give the library a chance to call init_recorder(ctx) itself
+        if not Globals.__recorder_inited then
+            pcall(init_recorder)   -- standalone: no context
+        end
+    end)
+end
+
+return function(ctx)
+    Globals.__recorder_inited = true
+    return init_recorder(ctx)
 end
