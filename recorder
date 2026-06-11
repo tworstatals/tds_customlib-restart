@@ -1875,3 +1875,4 @@ return function(ctx)
     Globals.__recorder_inited = true
     return init_recorder(ctx)
 end
+--
