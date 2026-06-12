@@ -2173,43 +2173,43 @@ function Tabs:SelectTab(p)
 				end
 			end
 			tw({v = Tab_1, t = 0.15, s = Enum.EasingStyle.Linear, d = "InOut", g = {BackgroundTransparency = 0}}):Play()
-				local function resetCol(col)
-					if not col then return end
-					for _, v in pairs(col:GetChildren()) do
-						if v:IsA('Frame') and v:FindFirstChild('Background') then
-							v.Background.Position = UDim2.new(0, 0, 0, 0)
-							v.Background.AnchorPoint = Vector2.new(1, 0)
-						end
+			if InPage_1 then
+				InPage_1.Visible = true
+			end
+
+			local function resetCol(col)
+				if not col then return end
+				for _, v in pairs(col:GetChildren()) do
+					if v:IsA('Frame') and v:FindFirstChild('Background') then
+						v.Background.Position = UDim2.new(0, 0, 0, 0)
+						v.Background.AnchorPoint = Vector2.new(1, 0)
 					end
 				end
-				resetCol(LeftColumn)
-				resetCol(RightColumn)
+			end
+			resetCol(LeftColumn)
+			resetCol(RightColumn)
 
-				task.spawn(function()
-					local function animCol(col)
-						if not col then return end
-						for _, v in pairs(col:GetChildren()) do
-							if v:IsA('Frame') then
-								local bg = v:FindFirstChild('Background')
-								if bg then
-									tw({
-										v = bg,
-										t = 0.3,
-										s = Enum.EasingStyle.Exponential,
-										d = "InOut",
-										g = {AnchorPoint = Vector2.new(0, 0)}
-									}):Play()
-								end
+			task.spawn(function()
+				local function animCol(col)
+					if not col then return end
+					for _, v in pairs(col:GetChildren()) do
+						if v:IsA('Frame') then
+							local bg = v:FindFirstChild('Background')
+							if bg then
+								tw({
+									v = bg,
+									t = 0.3,
+									s = Enum.EasingStyle.Exponential,
+									d = "InOut",
+									g = {AnchorPoint = Vector2.new(0, 0)}
+								}):Play()
 							end
 						end
 					end
-					animCol(LeftColumn)
-					animCol(RightColumn)
-				end)
-				if InPage_1 then
-				InPage_1.Visible = true
 				end
-			end
+				animCol(LeftColumn)
+				animCol(RightColumn)
+			end)
 			local tabChildren = TabList_1:GetChildren()
 			for i, v in pairs(tabChildren) do
 				if v:IsA('Frame') and v.Name ~= 'Line' then
@@ -2325,7 +2325,7 @@ function Tabs:SelectTab(p)
 		Section.BackgroundTransparency = 0
 		Section.BorderColor3 = Color3.fromRGB(0,0,0)
 		Section.BorderSizePixel = 0
-		Section.Size = UDim2.new(1, 0,0, 20)
+		Section.Size = UDim2.new(1, 0,1, 0)
 
 		local SecCorner = Instance.new("UICorner")
 		SecCorner.CornerRadius = UDim.new(0, 6)
@@ -2395,7 +2395,7 @@ function Tabs:SelectTab(p)
 
 			local function updateSize()
 				local contentHeight = ContentList.AbsoluteContentSize.Y
-				local targetSize = isExpanded and (20 + contentHeight) or 20
+				local targetSize = isExpanded and (28 + contentHeight) or 20
 				local targetContentSize = isExpanded and contentHeight or 0
 				
 				tw({v = RealBackground, t = 0.3, s = Enum.EasingStyle.Quad, d = "Out", g = {
@@ -2421,7 +2421,7 @@ function Tabs:SelectTab(p)
 			task.delay(0.1, function()
 				if isExpanded then
 					local contentHeight = ContentList.AbsoluteContentSize.Y
-					RealBackground.Size = UDim2.new(1, 0,0, 20 + contentHeight)
+					RealBackground.Size = UDim2.new(1, 0,0, 28 + contentHeight)
 					SectionContent.Size = UDim2.new(1, 0,0, contentHeight)
 				end
 			end)
