@@ -171,6 +171,20 @@ ScreenGui.Parent = game:GetService("CoreGui")
 
 local U, Tw = game:GetService("UserInputService"), game:GetService("TweenService")
 
+local function getAbsPos(obj)
+	return (obj and obj:IsA("GuiObject")) and obj.AbsolutePosition or Vector2.new(0, 0)
+end
+
+local function getAbsSize(obj)
+	if obj and obj:IsA("GuiObject") then
+		return obj.AbsoluteSize
+	elseif workspace and workspace.CurrentCamera then
+		return workspace.CurrentCamera.ViewportSize
+	else
+		return Vector2.new(1920, 1080)
+	end
+end
+
 do
 	function addToTheme(name, obj)
 		if not SaveTheme[name] then
@@ -664,7 +678,7 @@ do
 
 		addToTheme('Function.Dropdown.Dropdown Select.Background', DropdownSelect)
 
-		DropdownSelect.Position = UDim2.new(0, DropdownValue.AbsolutePosition.X - DropdownSelect.Parent.AbsolutePosition.X + DropdownValue.Size.X.Offset - 119, 0, DropdownValue.AbsolutePosition.Y - DropdownSelect.Parent.AbsolutePosition.Y + DropdownValue.Size.Y.Offset - 25)
+		DropdownSelect.Position = UDim2.new(0, DropdownValue.AbsolutePosition.X - getAbsPos(DropdownSelect.Parent).X + DropdownValue.Size.X.Offset - 119, 0, DropdownValue.AbsolutePosition.Y - getAbsPos(DropdownSelect.Parent).Y + DropdownValue.Size.Y.Offset - 25)
 
 		UICorner_1.Parent = DropdownSelect
 		UICorner_1.CornerRadius = UDim.new(0,4)
@@ -824,8 +838,8 @@ do
 				return
 			end
 			DropdownSelect.Visible = true
-			local targetX = DropdownValue.AbsolutePosition.X - DropdownSelect.Parent.AbsolutePosition.X + DropdownValue.Size.X.Offset - 119
-			local targetY = DropdownValue.AbsolutePosition.Y - DropdownSelect.Parent.AbsolutePosition.Y + DropdownValue.Size.Y.Offset - 25
+			local targetX = DropdownValue.AbsolutePosition.X - getAbsPos(DropdownSelect.Parent).X + DropdownValue.Size.X.Offset - 119
+			local targetY = DropdownValue.AbsolutePosition.Y - getAbsPos(DropdownSelect.Parent).Y + DropdownValue.Size.Y.Offset - 25
 			local contentHeight = UIListLayout_1.AbsoluteContentSize.Y + 54
 			if contentHeight <= 200 then
 				tw({v = DropdownSelect, t = 0.15, s = Enum.EasingStyle.Linear, d = "Out", g = {Size = UDim2.new(0, 150, 0, contentHeight), Position = UDim2.new(0, targetX, 0, targetY)}}):Play()
@@ -1227,11 +1241,25 @@ function Library:Window(p)
 	SidebarLogo.Position = UDim2.new(0, 16, 0, 0)
 	SidebarLogo.Size = UDim2.new(1, -16, 1, 0)
 	SidebarLogo.Font = Enum.Font.GothamBold
-	SidebarLogo.Text = "NEVERLOSE"
-	SidebarLogo.TextColor3 = Color3.fromRGB(255, 255, 255)
+	SidebarLogo.Text = string.upper(Title)
+	SidebarLogo.TextColor3 = themes[IsTheme].Main
 	SidebarLogo.TextSize = 16
 	SidebarLogo.TextXAlignment = Enum.TextXAlignment.Left
 	addToTheme('Text & Icon', SidebarLogo)
+
+	if Icon and Icon ~= "" then
+		local LogoImg = Instance.new("ImageLabel")
+		LogoImg.Name = "LogoImg"
+		LogoImg.Parent = SidebarHeader
+		LogoImg.BackgroundTransparency = 1
+		LogoImg.Position = UDim2.new(0, 14, 0.5, -10)
+		LogoImg.Size = UDim2.new(0, 20, 0, 20)
+		LogoImg.Image = (type(Icon) == "number") and ("rbxassetid://" .. Icon) or ("rbxassetid://129380715004437")
+		LogoImg.ScaleType = Enum.ScaleType.Fit
+		addToTheme('Text & Icon', LogoImg)
+		SidebarLogo.Position = UDim2.new(0, 42, 0, 0)
+		SidebarLogo.Size = UDim2.new(1, -42, 1, 0)
+	end
 
 	UIPadding_2.Parent = Page_1
 	UIPadding_2.PaddingBottom = UDim.new(0,5)
@@ -1248,8 +1276,8 @@ function Library:Window(p)
 	Footer.BackgroundColor3 = Color3.fromRGB(29,28,38)
 	Footer.BackgroundTransparency = 1
 	Footer.BorderSizePixel = 0
-	Footer.Position = UDim2.new(0, 0,1, 0)
-	Footer.Size = UDim2.new(1, 0,0, 24)
+	Footer.Position = UDim2.new(0, 180, 1, 0)
+	Footer.Size = UDim2.new(1, -180, 0, 24)
 
 	local name = "Unknown Game"
 
@@ -2258,7 +2286,7 @@ function Tabs:SelectTab(p)
 
 		Click.MouseButton1Click:Connect(chg)
 
-		changecanvas(ScrollingFrame_1, UIListLayout_1, 5)
+		-- Removed changecanvas to let updateCanvas handle 2-column masonry perfectly
 
 		task.spawn(function()
 			task.wait(0.1)
@@ -3863,8 +3891,8 @@ function Tabs:SelectTab(p)
 			ColorpickBar.BorderSizePixel = 0
 			ColorpickBar.Size = UDim2.new(0, 120,0, 0)
 			ColorpickBar.ClipsDescendants = true
-			local targetX = Picker_1.AbsolutePosition.X - ColorpickBar.Parent.AbsolutePosition.X + Picker_1.Size.X.Offset - 100
-			local targetY = Picker_1.AbsolutePosition.Y - ColorpickBar.Parent.AbsolutePosition.Y + Picker_1.Size.Y.Offset - 20
+			local targetX = Picker_1.AbsolutePosition.X - getAbsPos(ColorpickBar.Parent).X + Picker_1.Size.X.Offset - 100
+			local targetY = Picker_1.AbsolutePosition.Y - getAbsPos(ColorpickBar.Parent).Y + Picker_1.Size.Y.Offset - 20
 			ColorpickBar.Position = UDim2.new(0, targetX, 0, targetY)
 
 			addToTheme('Function.Color Picker.Color Select.Background', ColorpickBar)
@@ -4286,8 +4314,8 @@ function Tabs:SelectTab(p)
 			local isTouchDevice = U.TouchEnabled
 
 			local function open()
-				local targetX = Picker_1.AbsolutePosition.X - ColorpickBar.Parent.AbsolutePosition.X + Picker_1.Size.X.Offset - 145
-				local targetY = Picker_1.AbsolutePosition.Y - ColorpickBar.Parent.AbsolutePosition.Y + Picker_1.Size.Y.Offset - 50
+				local targetX = Picker_1.AbsolutePosition.X - getAbsPos(ColorpickBar.Parent).X + Picker_1.Size.X.Offset - 145
+				local targetY = Picker_1.AbsolutePosition.Y - getAbsPos(ColorpickBar.Parent).Y + Picker_1.Size.Y.Offset - 50
 				tw({v = ColorpickBar, t = 0.15, s = Enum.EasingStyle.Exponential, d = "Out", g = {Size = UDim2.new(0, 200,0, 125), Position = UDim2.new(0, targetX, 0, targetY)}}):Play()
 				tw({v = UIStroke_1, t = 0.15, s = Enum.EasingStyle.Linear, d = "Out", g = {Transparency = 0.95}}):Play()
 			end
@@ -5237,7 +5265,7 @@ function Tabs:SelectTab(p)
 		end)
 
 		if not HAA then
-			local AP, PAZ = Shadow_1.AbsolutePosition, Shadow_1.Parent.AbsoluteSize
+			local AP, PAZ = Shadow_1.AbsolutePosition, getAbsSize(Shadow_1.Parent)
 			local NP = UDim2.new((AP.X / PAZ.X),
 				Shadow_1.Position.X.Offset,
 				(AP.Y / PAZ.Y),
