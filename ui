@@ -265,18 +265,48 @@ function Library:Window(config)
 		return btn
 	end
 
-	makeTopIcon("rbxassetid://10747384394", -16)   -- close-ish placeholder
-	makeTopIcon("rbxassetid://10734950309", -52)   -- search
-	makeTopIcon("rbxassetid://119690296342461", -88) -- discord if available
+	local closeBtn = makeTopIcon("rbxassetid://10747384394", -16)   -- X close
+	local settingsBtn = makeTopIcon("rbxassetid://10734950309", -52)   -- search/settings
+	local discordBtn = makeTopIcon("rbxassetid://119690296342461", -88) -- discord
+
+	-- Discord button: copy link if available
+	if DiscordLink then
+		discordBtn.MouseButton1Click:Connect(function()
+			if setclipboard then setclipboard(DiscordLink) end
+		end)
+	end
+
+	-- Topbar drag
+	local dragging = false
+	local dragStart, startPos
+	Topbar.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			dragging = true
+			dragStart = input.Position
+			startPos = Shadow.Position
+		end
+	end)
+	U.InputChanged:Connect(function(input)
+		if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+			local delta = input.Position - dragStart
+			Shadow.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+		end
+	end)
+	U.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			dragging = false
+		end
+	end)
 
 	-- Sidebar
 	local Sidebar = Instance.new("Frame")
 	Sidebar.Name = "Sidebar"
 	Sidebar.Parent = Background
 	Sidebar.Position = UDim2.new(0, 0, 0, 48)
-	Sidebar.Size = UDim2.new(0, 210, 1, -48)
+	Sidebar.Size = UDim2.new(0, 220, 1, -48)
 	Sidebar.BackgroundColor3 = THEME.Sidebar
 	Sidebar.BorderSizePixel = 0
+	Sidebar.ClipsDescendants = false
 
 	local SidebarLine = Instance.new("Frame")
 	SidebarLine.Parent = Sidebar
@@ -298,6 +328,7 @@ function Library:Window(config)
 	TabScroll.ScrollBarImageColor3 = THEME.Accent
 	TabScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
 	TabScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	TabScroll.ClipsDescendants = true
 
 	local TabListLayout = Instance.new("UIListLayout")
 	TabListLayout.Parent = TabScroll
@@ -306,8 +337,8 @@ function Library:Window(config)
 
 	local TabPadding = Instance.new("UIPadding")
 	TabPadding.Parent = TabScroll
-	TabPadding.PaddingLeft = UDim.new(0, 10)
-	TabPadding.PaddingRight = UDim.new(0, 10)
+	TabPadding.PaddingLeft = UDim.new(0, 8)
+	TabPadding.PaddingRight = UDim.new(0, 8)
 	TabPadding.PaddingTop = UDim.new(0, 10)
 	TabPadding.PaddingBottom = UDim.new(0, 10)
 
@@ -319,6 +350,7 @@ function Library:Window(config)
 	ProfileFrame.Size = UDim2.new(1, 0, 0, 60)
 	ProfileFrame.BackgroundTransparency = 1
 	ProfileFrame.BorderSizePixel = 0
+	ProfileFrame.ClipsDescendants = false
 
 	local ProfileLine = Instance.new("Frame")
 	ProfileLine.Parent = ProfileFrame
@@ -340,17 +372,20 @@ function Library:Window(config)
 	AvatarImage.Parent = AvatarFrame
 	AvatarImage.Size = UDim2.new(1, 0, 1, 0)
 	AvatarImage.BackgroundTransparency = 1
-	AvatarImage.Image = ""
+	AvatarImage.Image = "rbxassetid://11833257693"
 	AvatarImage.ScaleType = Enum.ScaleType.Crop
 	round(AvatarImage, 18)
 	pcall(function()
-		AvatarImage.Image = "rbxthumb://type=AvatarHeadShot&id=" .. localPlayer.UserId .. "&w=48&h=48"
+		local id = localPlayer.UserId
+		if id and id > 0 then
+			AvatarImage.Image = "rbxthumb://type=AvatarHeadShot&id=" .. id .. "&w=48&h=48"
+		end
 	end)
 
 	local ProfileName = Instance.new("TextLabel")
 	ProfileName.Parent = ProfileFrame
 	ProfileName.BackgroundTransparency = 1
-	ProfileName.Position = UDim2.new(0, 58, 0, 12)
+	ProfileName.Position = UDim2.new(0, 56, 0, 12)
 	ProfileName.Size = UDim2.new(1, -70, 0, 18)
 	ProfileName.Font = Enum.Font.GothamBold
 	ProfileName.Text = localPlayer.Name
@@ -361,7 +396,7 @@ function Library:Window(config)
 	local ProfileStatus = Instance.new("TextLabel")
 	ProfileStatus.Parent = ProfileFrame
 	ProfileStatus.BackgroundTransparency = 1
-	ProfileStatus.Position = UDim2.new(0, 58, 0, 30)
+	ProfileStatus.Position = UDim2.new(0, 56, 0, 30)
 	ProfileStatus.Size = UDim2.new(1, -70, 0, 14)
 	ProfileStatus.Font = Enum.Font.Gotham
 	ProfileStatus.Text = "TDS Script"
@@ -373,8 +408,8 @@ function Library:Window(config)
 	local ContentFrame = Instance.new("Frame")
 	ContentFrame.Name = "Content"
 	ContentFrame.Parent = Background
-	ContentFrame.Position = UDim2.new(0, 210, 0, 48)
-	ContentFrame.Size = UDim2.new(1, -210, 1, -48)
+	ContentFrame.Position = UDim2.new(0, 220, 0, 48)
+	ContentFrame.Size = UDim2.new(1, -220, 1, -48)
 	ContentFrame.BackgroundTransparency = 1
 	ContentFrame.BorderSizePixel = 0
 
@@ -504,9 +539,9 @@ function Library:Window(config)
 
 		local iconImg = Instance.new("ImageLabel")
 		iconImg.Parent = tabButton
-		iconImg.Position = UDim2.new(0, 8, 0.5, 0)
+		iconImg.Position = UDim2.new(0, 10, 0.5, 0)
 		iconImg.AnchorPoint = Vector2.new(0, 0.5)
-		iconImg.Size = UDim2.new(0, 18, 0, 18)
+		iconImg.Size = UDim2.new(0, 16, 0, 16)
 		iconImg.BackgroundTransparency = 1
 		iconImg.Image = gl(tabIcon).Image
 		iconImg.ImageRectSize = gl(tabIcon).ImageRectSize
@@ -515,14 +550,15 @@ function Library:Window(config)
 
 		local textLabel = Instance.new("TextLabel")
 		textLabel.Parent = tabButton
-		textLabel.Position = UDim2.new(0, 34, 0, 0)
-		textLabel.Size = UDim2.new(1, -40, 1, 0)
+		textLabel.Position = UDim2.new(0, 32, 0, 0)
+		textLabel.Size = UDim2.new(1, -44, 1, 0)
 		textLabel.BackgroundTransparency = 1
 		textLabel.Font = Enum.Font.Gotham
 		textLabel.Text = tabTitle
 		textLabel.TextColor3 = THEME.TextDim
 		textLabel.TextSize = 12
 		textLabel.TextXAlignment = Enum.TextXAlignment.Left
+		textLabel.TextTruncate = Enum.TextTruncate.AtEnd
 
 		-- Content container for this tab (holds panels)
 		local TabContent = Instance.new("Frame")
@@ -1036,7 +1072,7 @@ function Library:Window(config)
 				open = not open
 				if open then
 					local abs = box.AbsolutePosition - ScreenGui.AbsolutePosition
-					menu.Position = UDim2.new(0, abs.X + 210, 0, abs.Y + 26)
+					menu.Position = UDim2.new(0, abs.X, 0, abs.Y + box.AbsoluteSize.Y + 2)
 					menu.Size = UDim2.new(0, box.AbsoluteSize.X, 0, math.min(#dList * 24 + 8, 200))
 					menu.Visible = true
 					tween(arrow, { Rotation = 0 }, 0.15)
@@ -1607,6 +1643,36 @@ function Library:Window(config)
 	Shadow.Visible = true
 	Background.Size = UDim2.new(1, 0, 1, 0) - UDim2.fromOffset(5, 5)
 	tween(Background, { Size = UDim2.new(1, 0, 1, 0) }, 0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
+
+	-- Toggle keybind
+	local uiVisible = true
+	local function toggleUI()
+		uiVisible = not uiVisible
+		if uiVisible then
+			Shadow.Visible = true
+			Background.Size = UDim2.new(1, 0, 1, 0) - UDim2.fromOffset(5, 5)
+			tween(Background, { Size = UDim2.new(1, 0, 1, 0), GroupTransparency = 0 }, 0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
+		else
+			tween(Background, { Size = UDim2.new(1, 0, 1, 0) - UDim2.fromOffset(5, 5), GroupTransparency = 1 }, 0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out).Completed:Connect(function()
+				if not uiVisible then Shadow.Visible = false end
+			end)
+		end
+	end
+
+	U.InputBegan:Connect(function(input, gameProcessed)
+		if gameProcessed then return end
+		if input.KeyCode == Keybind then
+			toggleUI()
+		end
+	end)
+
+	-- Close button hides to tray; use keybind to reopen
+	closeBtn.MouseButton1Click:Connect(function()
+		uiVisible = false
+		tween(Background, { Size = UDim2.new(1, 0, 1, 0) - UDim2.fromOffset(5, 5), GroupTransparency = 1 }, 0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out).Completed:Connect(function()
+			Shadow.Visible = false
+		end)
+	end)
 
 	return Window
 end
