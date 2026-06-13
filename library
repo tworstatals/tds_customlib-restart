@@ -2209,46 +2209,15 @@ end
 
 Window:Line()
 
--- // Recorder (external custom recorder - tworstatals/tds_customlib-restart)
--- Loaded in "library mode": passing Window makes it create its own "Recorder"
--- tab containing an "Open Recorder" button. The full recorder UI lives in the
--- popup that button opens.
-do
-    local RecorderUrl = "https://raw.githubusercontent.com/tworstatals/tds_customlib-restart/refs/heads/main/recorder"
-
-    local ok, RecorderInit = pcall(function()
-        return loadstring(game:HttpGet(RecorderUrl))()
-    end)
-
-    if ok and type(RecorderInit) == "function" then
-        local started = pcall(function()
-            RecorderInit({
-                Window = Window,
-                ReplicatedStorage = ReplicatedStorage,
-                LocalPlayer = LocalPlayer,
-                HttpService = HttpService,
-                GameState = GameState,
-                workspace = workspace
-            })
-        end)
-
-        if not started then
-            Window:Notify({
-                Title = "Recorder",
-                Desc = "Failed to initialize the recorder.",
-                Time = 5,
-                Type = "error"
-            })
-        end
-    else
-        Window:Notify({
-            Title = "Recorder",
-            Desc = "Failed to load the recorder script.",
-            Time = 5,
-            Type = "error"
-        })
-    end
-end
+local RecorderInit = loadstring(game:HttpGet("https://raw.githubusercontent.com/DuxiiT/auto-strat/refs/heads/main/Sources/Recorder.lua"))()
+RecorderInit({
+    Window = Window,
+    ReplicatedStorage = ReplicatedStorage,
+    LocalPlayer = LocalPlayer,
+    HttpService = HttpService,
+    GameState = GameState,
+    workspace = workspace
+})
 
 Window:Line()
 
