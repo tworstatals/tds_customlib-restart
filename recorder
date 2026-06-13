@@ -804,7 +804,7 @@ TDS:Mode("%s")%s
             writefile("Strat.txt", config_header)
         end
 
-        notify("ADS", "Recorder has started, place towers or type commands in the menu.")
+        notify("Pixel", "Recorder has started, place towers or type commands in the menu.")
     end
 
     stop_recording = function()
@@ -812,7 +812,7 @@ TDS:Mode("%s")%s
         if has_hook and menu then
             menu.Clear()
             menu.Log("Strategy saved to workspace folder 'Strat.txt'")
-            notify("ADS", "Recording saved! Check your workspace folder for Strat.txt")
+            notify("Pixel", "Recording saved! Check your workspace folder for Strat.txt")
         end
     end
 
@@ -1875,4 +1875,3 @@ return function(ctx)
     Globals.__recorder_inited = true
     return init_recorder(ctx)
 end
---
