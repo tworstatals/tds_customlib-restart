@@ -156,6 +156,7 @@ local AutoMilitaryBaseRunning = false
 local SellFarmsRunning = false
 local AutoGatlingRunning = false
 local GatlingExecuted = false
+local StackerErrorShown = false
 
 local MaxPathDistance = 300 -- default
 local MilMarker = nil
@@ -928,6 +929,11 @@ local function MissionsUIFix()
             end)
         end
     end)
+end
+
+function TDS:Addons()
+    -- Premium/key-system loader removed.
+    return false
 end
 
 local function GetEquippedTowers()
@@ -3470,6 +3476,17 @@ end
 
 function TDS:Place(TName, px, py, pz, ...)
     local args = {...}
+    local isStacking = args[#args] == "stack" or args[#args] == true
+
+    if isStacking and GameState == "GAME" then
+        Window:Notify({
+            Title = "ADS",
+            Desc = "Stacking/premium placement has been removed from this build.",
+            Time = 3,
+            Type = "error"
+        })
+        return false
+    end
 
     if GameState ~= "GAME" then
         return false 
