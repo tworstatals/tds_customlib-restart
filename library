@@ -156,9 +156,6 @@ local AutoMilitaryBaseRunning = false
 local SellFarmsRunning = false
 local AutoGatlingRunning = false
 local GatlingExecuted = false
-local AutoPremiumRunning = false
-local StackerErrorShown = false
-local PremiumLoaded = false
 
 local MaxPathDistance = 300 -- default
 local MilMarker = nil
@@ -186,9 +183,9 @@ local DefaultSettings = {
     AutoReady = false,
     AutoChain = false,
     AutoGatling = false,
-    AutoPremium = false,
     SupportCaravan = false,
     AutoDJ = false,
+    DJCustomSongID = "",
     AutoNecro = false,
     AutoRejoin = true,
     PrivateCode = "",
@@ -214,8 +211,6 @@ local DefaultSettings = {
     StreamerName = "",
     tagName = "None",
     Modifiers = {},
-    StatsWebhookURL = "",
-    StatsWebhookAuto = false,
 }
 
 local TimeScaleValues = {0.5, 1, 1.5, 2}
@@ -935,15 +930,6 @@ local function MissionsUIFix()
     end)
 end
 
-local IsCurrentlyLoading = false
-
--- Premium / key system fully removed. Kept as a no-op so any remaining
--- callers still work and treat features as already unlocked.
-function TDS:Addons()
-    PremiumLoaded = true
-    return true
-end
-
 local function GetEquippedTowers()
     local towers = {}
     local StateReplicators = ReplicatedStorage:FindFirstChild("StateReplicators")
@@ -1087,6 +1073,39 @@ local function StartEasyMode()
     end)
 end
 
+local function AutoSetDJSong(tower)
+    task.spawn(function()
+        local replicator = tower:WaitForChild("TowerReplicator", 10)
+        if not replicator then return end
+        if replicator:GetAttribute("Name") ~= "DJ Booth" then return end
+        if replicator:GetAttribute("OwnerId") ~= LocalPlayer.UserId then return end
+        
+        local songIdNum = tonumber(Globals.DJCustomSongID)
+        if not songIdNum then return end
+        
+        pcall(function()
+            RemoteFunc:InvokeServer(
+                "Troops",
+                "Execute",
+                {
+                    Data = { songIdNum },
+                    Name = "Music",
+                    Tower = tower
+                }
+            )
+        end)
+    end)
+end
+
+task.spawn(function()
+    local Towers = workspace:WaitForChild("Towers", 10)
+    if not Towers then return end
+    Towers.ChildAdded:Connect(AutoSetDJSong)
+    for _, tower in ipairs(Towers:GetChildren()) do
+        AutoSetDJSong(tower)
+    end
+end)
+
 -- // ui
 local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/DuxiiT/auto-strat/refs/heads/main/Sources/UI.lua"))()
 
@@ -1202,6 +1221,25 @@ local Automation = Window:Tab({Title = "Automation", Icon = "bot"}) do
         Value = Globals.AutoDJ,
         Callback = function(v)
             SetSetting("AutoDJ", v)
+        end
+    })
+
+    Automation:Textbox({
+        Title = "DJ Custom Music",
+        Desc = "Custom audio ID for your DJ Booth",
+        Placeholder = "Audio ID",
+        Value = Globals.DJCustomSongID or "",
+        ClearTextOnFocus = false,
+        Callback = function(value)
+            SetSetting("DJCustomSongID", value or "")
+            if not tonumber(value) then return end
+            task.spawn(function()
+                local TowersFolder = workspace:FindFirstChild("Towers")
+                if not TowersFolder then return end
+                for _, tower in ipairs(TowersFolder:GetChildren()) do
+                    AutoSetDJSong(tower)
+                end
+            end)
         end
     })
 
@@ -2171,15 +2209,46 @@ end
 
 Window:Line()
 
-local RecorderInit = loadstring(game:HttpGet("https://raw.githubusercontent.com/tworstatals/tds_customlib-restart/refs/heads/main/recorder"))()
-RecorderInit({
-    Window = Window,
-    ReplicatedStorage = ReplicatedStorage,
-    LocalPlayer = LocalPlayer,
-    HttpService = HttpService,
-    GameState = GameState,
-    workspace = workspace
-})
+-- // Recorder (external custom recorder - tworstatals/tds_customlib-restart)
+-- Loaded in "library mode": passing Window makes it create its own "Recorder"
+-- tab containing an "Open Recorder" button. The full recorder UI lives in the
+-- popup that button opens.
+do
+    local RecorderUrl = "https://raw.githubusercontent.com/tworstatals/tds_customlib-restart/refs/heads/main/recorder"
+
+    local ok, RecorderInit = pcall(function()
+        return loadstring(game:HttpGet(RecorderUrl))()
+    end)
+
+    if ok and type(RecorderInit) == "function" then
+        local started = pcall(function()
+            RecorderInit({
+                Window = Window,
+                ReplicatedStorage = ReplicatedStorage,
+                LocalPlayer = LocalPlayer,
+                HttpService = HttpService,
+                GameState = GameState,
+                workspace = workspace
+            })
+        end)
+
+        if not started then
+            Window:Notify({
+                Title = "Recorder",
+                Desc = "Failed to initialize the recorder.",
+                Time = 5,
+                Type = "error"
+            })
+        end
+    else
+        Window:Notify({
+            Title = "Recorder",
+            Desc = "Failed to load the recorder script.",
+            Time = 5,
+            Type = "error"
+        })
+    end
+end
 
 Window:Line()
 
@@ -3006,7 +3075,6 @@ end
 local function DoPlaceTower(TName, TPos, ...)
     local args = {...}
     Logger:Log("Placing tower: " .. TName)
-    local attempts = 0
     while true do
         local ok, res = pcall(function()
             return RemoteFunc:InvokeServer("Troops", "Place", {
@@ -3016,11 +3084,6 @@ local function DoPlaceTower(TName, TPos, ...)
         end)
 
         if ok and CheckResOk(res) then return true end
-        attempts += 1
-        if attempts >= 40 then        -- ~10s; avoid freezing the strat forever
-            Logger:Log("Place failed after retries: " .. TName)
-            return false
-        end
         task.wait(0.25)
     end
 end
@@ -3427,29 +3490,6 @@ end
 function TDS:WaitForWave(targetWave)
     if GameState ~= "GAME" then return false end
     while self:GetWave() < targetWave do
-        if self:IsMatchOver() then return false end   -- bail if match ended early (died/lost)
-        task.wait(0.5)
-    end
-    return true
-end
-
--- True once the end-of-match rewards screen (win or loss) is showing.
-function TDS:IsMatchOver()
-    local ok, over = pcall(function()
-        local root = PlayerGui:FindFirstChild("ReactGameNewRewards")
-        local frame = root and root:FindFirstChild("Frame")
-        if not (frame and frame.Visible) then return false end
-        local gameOver = frame:FindFirstChild("gameOver")
-        if not (gameOver and gameOver.Visible) then return false end
-        local rewards = gameOver:FindFirstChild("RewardsScreen")
-        return rewards ~= nil and rewards.Visible == true
-    end)
-    return ok and over == true
-end
-
--- Blocks until the match ends (win or loss). Returns true once over.
-function TDS:WaitForMatchEnd()
-    while not self:IsMatchOver() do
         task.wait(0.5)
     end
     return true
@@ -3459,36 +3499,8 @@ function TDS:RestartGame()
     TriggerRestart()
 end
 
--- Clears placed-tower tracking so indexes start fresh next match.
--- Call this at the start of every run (after a restart) so TDS:Upgrade/Sell/etc
--- don't point at old, destroyed towers from the previous match.
-function TDS:Reset()
-    table.clear(self.PlacedTowers)
-    table.clear(UpgradeHistory)
-    self.LastVoteSkipTarget = 0
-end
-
--- Clears the strategy logger (crash-proof).
-function TDS:ClearLog()
-    pcall(function()
-        if Logger and Logger.Clear then
-            Logger:Clear()
-        end
-    end)
-end
-
 function TDS:Place(TName, px, py, pz, ...)
     local args = {...}
-    local isStacking = args[#args] == "stack" or args[#args] == true
-
-    -- Stacking is free (no premium / key system).
-    -- We replicate the manual stacker's proven method: place the tower at an
-    -- elevated Y so the server drops/snaps it onto the tower below. Without the
-    -- elevation the server rejects the placement and nothing happens.
-    if isStacking then
-        table.remove(args)              -- strip the trailing "stack"/true flag
-        py = py + 25                    -- raise Y like the manual stacker does
-    end
 
     if GameState ~= "GAME" then
         return false 
@@ -3507,7 +3519,6 @@ function TDS:Place(TName, px, py, pz, ...)
     DoPlaceTower(TName, Vector3.new(px, py, pz), unpack(args))
 
     local NewT
-    local deadline = os.clock() + 5
     repeat
         for _, child in ipairs(workspace.Towers:GetChildren()) do
             if not existing[child] then
@@ -3520,8 +3531,8 @@ function TDS:Place(TName, px, py, pz, ...)
             end
             if NewT then break end
         end
-        if not NewT then task.wait(0.05) end
-    until NewT or os.clock() > deadline
+        task.wait(0.05)
+    until NewT
 
     table.insert(self.PlacedTowers, NewT)
     return #self.PlacedTowers
@@ -3529,8 +3540,7 @@ end
 
 function TDS:Upgrade(idx, PId)
     local t = self.PlacedTowers[idx]
-    -- skip towers that no longer exist (e.g. stale entries after a restart)
-    if t and t.Parent then
+    if t then
         DoUpgradeTower(t, PId or 1)
         Logger:Log("Upgrading tower index: " .. idx)
         UpgradeHistory[idx] = (UpgradeHistory[idx] or 0) + 1
@@ -3686,11 +3696,6 @@ local function StartAutoGatling()
         end
         AutoGatlingRunning = false
     end)
-end
-
--- Premium / key system removed; this is now a no-op.
-local function StartAutoPremium()
-    AutoPremiumRunning = false
 end
 
 local function StartAutoPickups()
@@ -4341,409 +4346,6 @@ end)
 
 if Globals.ClaimRewards and not AutoClaimRewards then
     StartClaimRewards()
-end
-
--- // ===== Session Stats (separate small window) =====
-do
-    -- read a player stat (Value object, attribute, or leaderstats child)
-    local function ReadStat(name)
-        -- direct child of player
-        local obj = LocalPlayer:FindFirstChild(name)
-        if obj then
-            local ok, v = pcall(function() return obj.Value end)
-            if ok and type(v) == "number" then return v end
-        end
-        -- attribute on the player
-        local attr = LocalPlayer:GetAttribute(name)
-        if type(attr) == "number" then return attr end
-        -- leaderstats folder fallback
-        local ls = LocalPlayer:FindFirstChild("leaderstats")
-        if ls then
-            local lobj = ls:FindFirstChild(name)
-            if lobj then
-                local ok, v = pcall(function() return lobj.Value end)
-                if ok and type(v) == "number" then return v end
-            end
-        end
-        return nil
-    end
-
-    -- format seconds -> HH:MM:SS
-    local function FmtTime(sec)
-        sec = math.floor(sec)
-        local h = math.floor(sec / 3600)
-        local m = math.floor((sec % 3600) / 60)
-        local s = sec % 60
-        return string.format("%02d:%02d:%02d", h, m, s)
-    end
-
-    -- cumulative totals gained since execution
-    local Totals = { Coins = 0, XP = 0, Gems = 0, Tickets = 0 }
-    local Last = {}
-    local StartClock = os.clock()
-
-    -- map: display key -> list of stat names to try
-    local StatKeys = {
-        Coins   = { "Coins" },
-        XP      = { "Experience", "XP", "Exp" },
-        Gems    = { "Gems" },
-        Tickets = { "TimescaleTickets", "Tickets" },
-    }
-
-    local function ReadAny(names)
-        for _, n in ipairs(names) do
-            local v = ReadStat(n)
-            if v ~= nil then return v end
-        end
-        return nil
-    end
-
-    -- Live values pushed by the game via RemoteEvent.OnClientEvent
-    -- pattern: ("Session", "Update", "Values.Gems", <amount>)
-    local EventValues = {}
-
-    -- map the remote "Values.X" path tail -> our display key
-    local PathToKey = {
-        gems = "Gems",
-        coins = "Coins",
-        experience = "XP",
-        exp = "XP",
-        xp = "XP",
-        timescaletickets = "Tickets",
-        tickets = "Tickets",
-    }
-
-    pcall(function()
-        local RE = ReplicatedStorage:FindFirstChild("RemoteEvent")
-            or ReplicatedStorage:WaitForChild("RemoteEvent", 5)
-        if RE then
-            RE.OnClientEvent:Connect(function(...)
-                local a = {...}
-                if a[1] == "Session" and a[2] == "Update" and type(a[3]) == "string" then
-                    local tail = a[3]:match("([^%.]+)$")   -- "Values.Gems" -> "Gems"
-                    local val = tonumber(a[4])
-                    if tail and val then
-                        local key = PathToKey[tail:lower()]
-                        if key then
-                            EventValues[key] = val
-                        end
-                    end
-                end
-            end)
-        end
-    end)
-
-    -- prefer the live event value, fall back to the player stat object
-    local function ReadLive(key, names)
-        if EventValues[key] ~= nil then
-            return EventValues[key]
-        end
-        return ReadAny(names)
-    end
-
-    -- seed the "last" values so we only count gains AFTER execution
-    for key, names in pairs(StatKeys) do
-        Last[key] = ReadLive(key, names)
-    end
-
-    -- build the small window (wrapped in pcall in case the UI lib differs)
-    local StatsOk, StatsErr = pcall(function()
-        -- snapshot existing window roots so we can find the new one afterwards
-        local AetherGui = game:GetService("CoreGui"):FindFirstChild("Aether")
-        local existingShadows = {}
-        if AetherGui then
-            for _, c in ipairs(AetherGui:GetChildren()) do
-                if c.Name == "Shadow" then
-                    existingShadows[c] = true
-                end
-            end
-        end
-
-        local StatsWindow = Library:Window({
-            Title = "Session Stats",
-            Desc = "Gains since execution",
-            Theme = "Default",
-            Config = {
-                Keybind = Enum.KeyCode.RightControl,
-                Size = UDim2.new(0, 500, 0, 400)
-            }
-        })
-
-        -- move the new window so it doesn't sit on top of the main hub
-        task.spawn(function()
-            AetherGui = AetherGui or game:GetService("CoreGui"):FindFirstChild("Aether")
-            if not AetherGui then return end
-            local NewShadow
-            local deadline = os.clock() + 5
-            repeat
-                for _, c in ipairs(AetherGui:GetChildren()) do
-                    if c.Name == "Shadow" and not existingShadows[c] then
-                        NewShadow = c
-                        break
-                    end
-                end
-                if not NewShadow then task.wait(0.1) end
-            until NewShadow or os.clock() > deadline
-
-            if NewShadow then
-                -- offset to the right of the main window (both are 500 wide -> ~520px gap)
-                NewShadow.Position = UDim2.new(0.5, 520, 0.5, 0)
-            end
-        end)
-
-        local Tab = StatsWindow:Tab({ Title = "📊 Stats", Icon = "bar-chart-3" })
-        Tab:Section({ Title = "Totals (since start)" })
-
-        local CoinsLbl   = Tab:Label({ Title = "Total Coins: 0", Desc = "" })
-        local XPLbl      = Tab:Label({ Title = "Total XP: 0", Desc = "" })
-        local GemsLbl    = Tab:Label({ Title = "Total Gems: 0", Desc = "" })
-        local TicketsLbl = Tab:Label({ Title = "Total Timescale Tickets: 0", Desc = "" })
-
-        Tab:Section({ Title = "Rate (per hour)" })
-        local CoinsPH    = Tab:Label({ Title = "Coins/h: 0", Desc = "" })
-        local XPPH       = Tab:Label({ Title = "XP/h: 0", Desc = "" })
-        local GemsPH     = Tab:Label({ Title = "Gems/h: 0", Desc = "" })
-        local TicketsPH  = Tab:Label({ Title = "Tickets/h: 0", Desc = "" })
-
-        Tab:Section({ Title = "Session" })
-        local LevelLbl = Tab:Label({ Title = "Current Level: 0", Desc = "" })
-        local TimeLbl  = Tab:Label({ Title = "Time Running: 00:00:00", Desc = "" })
-
-        -- format a per-hour number with comma separators
-        local function FmtNum(n)
-            n = math.floor(n + 0.5)
-            local s = tostring(n)
-            local out = s:reverse():gsub("(%d%d%d)", "%1,"):reverse()
-            out = out:gsub("^,", "")
-            return out
-        end
-
-        task.spawn(function()
-            while true do
-                -- accumulate positive deltas (i.e. amounts gained, ignoring spending)
-                for key, names in pairs(StatKeys) do
-                    local cur = ReadLive(key, names)
-                    if cur ~= nil then
-                        local prev = Last[key]
-                        if prev ~= nil and cur > prev then
-                            Totals[key] = Totals[key] + (cur - prev)
-                        end
-                        Last[key] = cur
-                    end
-                end
-
-                local elapsed = os.clock() - StartClock
-                local hours = elapsed / 3600
-                local function rate(total)
-                    if hours <= 0 then return 0 end
-                    return total / hours
-                end
-
-                local level = ReadStat("Level") or 0
-
-                -- live current values (for display + to prove reads work)
-                local curCoins   = ReadLive("Coins", StatKeys.Coins) or 0
-                local curXP      = ReadLive("XP", StatKeys.XP) or 0
-                local curGems    = ReadLive("Gems", StatKeys.Gems) or 0
-                local curTickets = ReadLive("Tickets", StatKeys.Tickets) or 0
-
-                pcall(function()
-                    CoinsLbl:SetTitle("Total Coins: " .. FmtNum(Totals.Coins) .. "  (now: " .. FmtNum(curCoins) .. ")")
-                    XPLbl:SetTitle("Total XP: " .. FmtNum(Totals.XP) .. "  (now: " .. FmtNum(curXP) .. ")")
-                    GemsLbl:SetTitle("Total Gems: " .. FmtNum(Totals.Gems) .. "  (now: " .. FmtNum(curGems) .. ")")
-                    TicketsLbl:SetTitle("Total Timescale Tickets: " .. FmtNum(Totals.Tickets) .. "  (now: " .. FmtNum(curTickets) .. ")")
-
-                    CoinsPH:SetTitle("Coins/h: " .. FmtNum(rate(Totals.Coins)))
-                    XPPH:SetTitle("XP/h: " .. FmtNum(rate(Totals.XP)))
-                    GemsPH:SetTitle("Gems/h: " .. FmtNum(rate(Totals.Gems)))
-                    TicketsPH:SetTitle("Tickets/h: " .. FmtNum(rate(Totals.Tickets)))
-
-                    LevelLbl:SetTitle("Current Level: " .. tostring(level))
-                    TimeLbl:SetTitle("Time Running: " .. FmtTime(elapsed))
-                end)
-
-                task.wait(1)
-            end
-        end)
-
-        -- ===== Webhook tab (separate left tab, like "Stats") =====
-        local WHTab = StatsWindow:Tab({ Title = "🔗 Webhook", Icon = "webhook" })
-        WHTab:Section({ Title = "Discord Webhook" })
-
-        -- webhook state backed by the persistent config (auto-saves to ADS_Config.json)
-        -- falls back to the main hub's WebhookURL the first time if no stats url is set
-        if (not Globals.StatsWebhookURL or Globals.StatsWebhookURL == "")
-            and Globals.WebhookURL and Globals.WebhookURL ~= "" then
-            SetSetting("StatsWebhookURL", Globals.WebhookURL)
-        end
-
-        local WH = {
-            Url = Globals.StatsWebhookURL or "",
-            Auto = Globals.StatsWebhookAuto or false,
-        }
-
-        WHTab:Textbox({
-            Title = "Webhook URL:",
-            Desc = "Where match summaries are sent (auto-saved)",
-            Placeholder = "https://discord.com/api/webhooks/...",
-            Value = WH.Url,
-            ClearTextOnFocus = true,
-            Callback = function(value)
-                WH.Url = value or ""
-                SetSetting("StatsWebhookURL", WH.Url)   -- persist
-            end
-        })
-
-        WHTab:Toggle({
-            Title = "Auto Send (per match)",
-            Desc = "Send a summary automatically when each match ends (auto-saved)",
-            Value = WH.Auto,
-            Callback = function(v)
-                WH.Auto = v
-                SetSetting("StatsWebhookAuto", v)       -- persist
-            end
-        })
-
-        -- small number formatter (local to this tab)
-        local function WHNum(n)
-            n = math.floor(tonumber(n) or 0)
-            local s = tostring(n)
-            local out = s:reverse():gsub("(%d%d%d)", "%1,"):reverse()
-            out = out:gsub("^,", "")
-            return out
-        end
-
-        -- build the embed payload for a given match-rewards table
-        local function BuildPayload(match)
-            local statusColor = 3066993            -- green (win)
-            if match.Status == "LOSS" then
-                statusColor = 15158332             -- red
-            elseif match.Status == "UNKNOWN" then
-                statusColor = 9807270              -- gray
-            end
-
-            -- rewards gained THIS match
-            local rewardLines = {
-                "Coins: **" .. WHNum(match.Coins) .. "**",
-                "Gems: **" .. WHNum(match.Gems) .. "**",
-                "XP: **" .. WHNum(match.XP) .. "**",
-            }
-            if match.Others and #match.Others > 0 then
-                for _, item in ipairs(match.Others) do
-                    table.insert(rewardLines, (item.Name or "Item") .. ": **" .. tostring(item.Amount) .. "**")
-                end
-            end
-
-            -- session summary (totals since execution)
-            local elapsed = os.clock() - StartClock
-            local summaryLines = {
-                "Total Coins: **" .. WHNum(Totals.Coins) .. "**",
-                "Total Gems: **" .. WHNum(Totals.Gems) .. "**",
-                "Total XP: **" .. WHNum(Totals.XP) .. "**",
-                "Total Timescale Tickets: **" .. WHNum(Totals.Tickets) .. "**",
-                "Runtime: **" .. FmtTime(elapsed) .. "**",
-            }
-
-            return {
-                username = "TDS AutoStrat",
-                embeds = {{
-                    title = "Match Ended - " .. tostring(match.Status),
-                    color = statusColor,
-                    fields = {
-                        { name = "Result", value = string.format("Status: **%s**\nWave: **%d**\nTime: **%s**", tostring(match.Status), match.Wave or 0, match.Time or "00:00"), inline = false },
-                        { name = "Rewards Gained", value = table.concat(rewardLines, "\n"), inline = true },
-                        { name = "Session Summary", value = table.concat(summaryLines, "\n"), inline = true },
-                    },
-                    footer = { text = "Aether Hub - Session Stats" },
-                }}
-            }
-        end
-
-        local function SendPayload(payload)
-            if not SendRequest then return false, "no http function" end
-            if not WH.Url or WH.Url == "" then return false, "empty url" end
-            local ok, res = pcall(function()
-                return SendRequest({
-                    Url = WH.Url,
-                    Method = "POST",
-                    Headers = { ["Content-Type"] = "application/json" },
-                    Body = HttpService:JSONEncode(payload)
-                })
-            end)
-            if ok and res and res.StatusCode and res.StatusCode >= 200 and res.StatusCode < 300 then
-                return true
-            end
-            return false, (ok and res and res.StatusCode) or res
-        end
-
-        WHTab:Button({
-            Title = "Send Summary Now",
-            Desc = "Send the current match + session summary",
-            Callback = function()
-                if not WH.Url or WH.Url == "" then
-                    return Window:Notify({ Title = "Error", Desc = "Webhook URL is empty!", Time = 3, Type = "error" })
-                end
-                local match = GetAllRewards()
-                local ok, err = SendPayload(BuildPayload(match))
-                if ok then
-                    Window:Notify({ Title = "Webhook", Desc = "Summary sent!", Time = 3, Type = "normal" })
-                else
-                    Window:Notify({ Title = "Error", Desc = "Failed to send (" .. tostring(err) .. ")", Time = 5, Type = "error" })
-                end
-            end
-        })
-
-        WHTab:Button({
-            Title = "Test Webhook",
-            Desc = "Send a test message",
-            Callback = function()
-                if not WH.Url or WH.Url == "" then
-                    return Window:Notify({ Title = "Error", Desc = "Webhook URL is empty!", Time = 3, Type = "error" })
-                end
-                local ok, err = SendPayload({ content = "Webhook Test - Aether Hub Session Stats" })
-                if ok then
-                    Window:Notify({ Title = "Webhook", Desc = "Test sent successfully!", Time = 3, Type = "normal" })
-                else
-                    Window:Notify({ Title = "Error", Desc = "Invalid webhook (" .. tostring(err) .. ")", Time = 5, Type = "error" })
-                end
-            end
-        })
-
-        -- auto-send watcher: fires once per match end while Auto is on
-        task.spawn(function()
-            local function MatchOver()
-                local ok, over = pcall(function()
-                    local root = PlayerGui:FindFirstChild("ReactGameNewRewards")
-                    local frame = root and root:FindFirstChild("Frame")
-                    if not (frame and frame.Visible) then return false end
-                    local g = frame:FindFirstChild("gameOver")
-                    if not (g and g.Visible) then return false end
-                    local r = g:FindFirstChild("RewardsScreen")
-                    return r ~= nil and r.Visible == true
-                end)
-                return ok and over == true
-            end
-
-            local sentThisMatch = false
-            while true do
-                if MatchOver() then
-                    if WH.Auto and not sentThisMatch then
-                        sentThisMatch = true
-                        task.wait(1.5)   -- let the rewards screen fully populate
-                        local match = GetAllRewards()
-                        pcall(function() SendPayload(BuildPayload(match)) end)
-                    end
-                else
-                    sentThisMatch = false   -- reset for the next match
-                end
-                task.wait(1)
-            end
-        end)
-    end)
-
-    if not StatsOk then
-        warn("[Session Stats] failed to build window: " .. tostring(StatsErr))
-    end
 end
 
 MissionsUIFix()
