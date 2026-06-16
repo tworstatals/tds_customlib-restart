@@ -937,8 +937,6 @@ end
 
 local IsCurrentlyLoading = false
 
--- Premium / key system fully removed. Kept as a no-op so any remaining
--- callers still work and treat features as already unlocked.
 function TDS:Addons()
     PremiumLoaded = true
     return true
@@ -1093,7 +1091,7 @@ local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/twors
 
 local Window = Library:Window({
     Title = "Pixel",
-    Desc = "blue/pink vaporwave hub",
+    Desc = "best tds script",
     Theme = "Default",
     DiscordLink = "https://discord.gg/6qyA3Ssrsu",
     Icon = 79682909374684,
@@ -3689,7 +3687,6 @@ local function StartAutoGatling()
     end)
 end
 
--- Premium / key system removed; this is now a no-op.
 local function StartAutoPremium()
     AutoPremiumRunning = false
 end
@@ -4492,7 +4489,7 @@ do
             end
         end)
 
-        local Tab = StatsWindow:Tab({ Title = "Stats", Icon = "bar-chart-3" })
+        local Tab = StatsWindow:Tab({ Title = "Stats", Icon = "chart-bar-increasing" })
         Tab:Section({ Title = "Totals (since start)" })
 
         local CoinsLbl   = Tab:Label({ Title = "Total Coins: 0", Desc = "" })
