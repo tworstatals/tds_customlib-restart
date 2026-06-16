@@ -2,162 +2,162 @@ Library = {}
 SaveTheme = {}
 
 local themes = {
-
-	index = {'Default'},
-
+	index = {'Default', 'Dark'},
 	Default = {
-
 		['Shadow'] = Color3.fromRGB(255, 90, 170),
-
 		['Background'] = Color3.fromRGB(18, 16, 34),
-
 		['Page'] = Color3.fromRGB(15, 14, 30),
-
 		['Main'] = Color3.fromRGB(80, 130, 255),
-
 		['Text & Icon'] = Color3.fromRGB(240, 240, 255),
-
 		['Function'] = {
-
 			['Toggle'] = {
-
 				['Background'] = Color3.fromRGB(45, 42, 78),
-
 				['True'] = {
-
 					['Toggle Background'] = Color3.fromRGB(58, 54, 98),
-
 					['Toggle Value'] = Color3.fromRGB(255, 90, 170),
-
 				},
-
 				['False'] = {
-
 					['Toggle Background'] = Color3.fromRGB(58, 54, 98),
-
 					['Toggle Value'] = Color3.fromRGB(80, 130, 255),
-
 				}
-
 			},
-
 			['Label'] = {
-
 				['Background'] = Color3.fromRGB(45, 42, 78),
-
 			},
-
 			['Dropdown'] = {
-
 				['Background'] = Color3.fromRGB(45, 42, 78),
-
 				['Value Background'] = Color3.fromRGB(26, 24, 48),
-
 				['Value Stroke'] = Color3.fromRGB(120, 150, 255),
-
 				['Dropdown Select'] = {
-
 					['Background'] = Color3.fromRGB(26, 24, 48),
-
 					['Search'] = Color3.fromRGB(26, 24, 46),
-
 					['Item Background'] = Color3.fromRGB(60, 56, 100),
-
 				}
-
 			},
-
 			['Slider'] = {
-
 				['Background'] = Color3.fromRGB(45, 42, 78),
-
 				['Value Background'] = Color3.fromRGB(26, 24, 48),
-
 				['Value Stroke'] = Color3.fromRGB(120, 150, 255),
-
 				['Slider Bar'] = Color3.fromRGB(80, 130, 255),
-
 				['Slider Bar Value'] = Color3.fromRGB(255, 90, 170),
-
 				['Circle Value'] = Color3.fromRGB(255, 255, 255)
-
 			},
-
 			['Code'] = {
-
 				['Background'] = ColorSequence.new{ColorSequenceKeypoint.new(0, Color3.fromRGB(18, 16, 34)), ColorSequenceKeypoint.new(1, Color3.fromRGB(18, 16, 34))},
-
 				['Background Code'] = Color3.fromRGB(60, 56, 100),
-
 				['Background Code Value'] = Color3.fromRGB(26, 24, 46),
-
 				['ScrollingFrame Code'] = Color3.fromRGB(255, 120, 190)
-
 			},
-
 			['Button'] = {
-
 				['Background'] = Color3.fromRGB(45, 42, 78),
-
 				['Click'] = Color3.fromRGB(255, 120, 190)
-
 			},
-
 			['Textbox'] = {
-
 				['Background'] = Color3.fromRGB(45, 42, 78),
-
 				['Value Background'] = Color3.fromRGB(26, 24, 48),
-
 				['Value Stroke'] = Color3.fromRGB(120, 150, 255),
-
 			},
-
 			['Keybind'] = {
-
 				['Background'] = Color3.fromRGB(45, 42, 78),
-
 				['Value Background'] = Color3.fromRGB(26, 24, 48),
-
 				['Value Stroke'] = Color3.fromRGB(120, 150, 255),
-
 				['True'] = {
-
 					['Toggle Background'] = Color3.fromRGB(255, 90, 170),
-
 					['Toggle Value'] = Color3.fromRGB(80, 130, 255),
-
 				},
-
 				['False'] = {
-
 					['Toggle Background'] = Color3.fromRGB(58, 54, 98),
-
 					['Toggle Value'] = Color3.fromRGB(44, 42, 62),
-
 				}
-
 			},
-
 			['Color Picker'] = {
-
 				['Background'] = Color3.fromRGB(45, 42, 78),
-
 				['Color Select'] = {
-
 					['Background'] = Color3.fromRGB(26, 24, 48),
-
 					['UIStroke'] = Color3.fromRGB(120, 150, 255),
-
 				}
-
 			}
-
 		}
-
 	},
-
+	Dark = {
+		['Shadow'] = Color3.fromRGB(15, 15, 15),
+		['Background'] = Color3.fromRGB(20, 20, 20),
+		['Page'] = Color3.fromRGB(18, 18, 18),
+		['Main'] = Color3.fromRGB(50, 50, 50),
+		['Text & Icon'] = Color3.fromRGB(230, 230, 230),
+		['Function'] = {
+			['Toggle'] = {
+				['Background'] = Color3.fromRGB(25, 25, 25),
+				['True'] = {
+					['Toggle Background'] = Color3.fromRGB(40, 40, 40),
+					['Toggle Value'] = Color3.fromRGB(70, 130, 180),
+				},
+				['False'] = {
+					['Toggle Background'] = Color3.fromRGB(30, 30, 30),
+					['Toggle Value'] = Color3.fromRGB(40, 40, 40),
+				}
+			},
+			['Label'] = {
+				['Background'] = Color3.fromRGB(25, 25, 25),
+			},
+			['Dropdown'] = {
+				['Background'] = Color3.fromRGB(25, 25, 25),
+				['Value Background'] = Color3.fromRGB(20, 20, 20),
+				['Value Stroke'] = Color3.fromRGB(230, 230, 230),
+				['Dropdown Select'] = {
+					['Background'] = Color3.fromRGB(20, 20, 20),
+					['Search'] = Color3.fromRGB(30, 30, 30),
+					['Item Background'] = Color3.fromRGB(30, 30, 30),
+				}
+			},
+			['Slider'] = {
+				['Background'] = Color3.fromRGB(25, 25, 25),
+				['Value Background'] = Color3.fromRGB(20, 20, 20),
+				['Value Stroke'] = Color3.fromRGB(230, 230, 230),
+				['Slider Bar'] = Color3.fromRGB(40, 40, 40),
+				['Slider Bar Value'] = Color3.fromRGB(70, 130, 180),
+				['Circle Value'] = Color3.fromRGB(255, 255, 255)
+			},
+			['Code'] = {
+				['Background'] = ColorSequence.new{ColorSequenceKeypoint.new(0, Color3.fromRGB(25, 25, 25)), ColorSequenceKeypoint.new(1, Color3.fromRGB(25, 25, 25))},
+				['Background Code'] = Color3.fromRGB(35, 35, 35),
+				['Background Code Value'] = Color3.fromRGB(28, 28, 28),
+				['ScrollingFrame Code'] = Color3.fromRGB(150, 150, 150)
+			},
+			['Button'] = {
+				['Background'] = Color3.fromRGB(25, 25, 25),
+				['Click'] = Color3.fromRGB(230, 230, 230)
+			},
+			['Textbox'] = {
+				['Background'] = Color3.fromRGB(25, 25, 25),
+				['Value Background'] = Color3.fromRGB(20, 20, 20),
+				['Value Stroke'] = Color3.fromRGB(230, 230, 230),
+			},
+			['Keybind'] = {
+				['Background'] = Color3.fromRGB(25, 25, 25),
+				['Value Background'] = Color3.fromRGB(20, 20, 20),
+				['Value Stroke'] = Color3.fromRGB(230, 230, 230),
+				['True'] = {
+					['Toggle Background'] = Color3.fromRGB(40, 40, 40),
+					['Toggle Value'] = Color3.fromRGB(70, 130, 180),
+				},
+				['False'] = {
+					['Toggle Background'] = Color3.fromRGB(30, 30, 30),
+					['Toggle Value'] = Color3.fromRGB(40, 40, 40),
+				}
+			},
+			['Color Picker'] = {
+				['Background'] = Color3.fromRGB(25, 25, 25),
+				['Color Select'] = {
+					['Background'] = Color3.fromRGB(20, 20, 20),
+					['UIStroke'] = Color3.fromRGB(230, 230, 230),
+				}
+			}
+		}
+	},
 }
+
+
 
 
 local existingUI = game:GetService("CoreGui"):FindFirstChild("Pixel")
@@ -266,7 +266,7 @@ do
 		local sideLower = string.lower(tostring(side))
 		if sideLower == "r" or sideLower == "right" or side == 2 then
 			return pr
-		elseif sideLower == "l" or sideLower == "left" or side == 1 thenz
+		elseif sideLower == "l" or sideLower == "left" or side == 1 then
 			return pl
 		else
 			return pl
@@ -1440,7 +1440,7 @@ function Library:Window(p)
 	Minisize_1.BorderColor3 = Color3.fromRGB(0,0,0)
 	Minisize_1.BorderSizePixel = 0
 	Minisize_1.LayoutOrder = 2
-	Minisize_1.Size = UDim2.new(0, 24, 0, 24)
+	Minisize_1.Size = UDim2.new(0, 16,0, 16)
 	Minisize_1.Image = "rbxassetid://13857987062"
 	Minisize_1.ImageTransparency = 0.5
 
