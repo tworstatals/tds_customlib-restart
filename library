@@ -7573,6 +7573,9 @@ local Strategies = Window:Tab({Title = "Strategies", Icon = "clipboard-list"}) d
                         local hasAutoRestart = currentContent:match("autorestart%s*=%s*true")
                         local safeContent = currentContent:gsub("while%s+true%s+do", 'while Globals.RunningStrats["' .. strat.name .. '"] do')
                         
+                        local envPrep = "local TDS = getgenv().TDS or shared.TDSTable or shared['TDS_Table'] or TDS\n"
+                        safeContent = envPrep .. safeContent
+
                         if hasAutoRestart and not currentContent:match("while%s+true%s+do") then
                             Window:Notify({ Title = "Pixel", Desc = "Running " .. strat.name .. " with Auto-Restart...", Time = 3 })
                             while Globals.RunningStrats[strat.name] do
@@ -7581,9 +7584,13 @@ local Strategies = Window:Tab({Title = "Strategies", Icon = "clipboard-list"}) d
                                 
                                 local func, err = loadstring(safeContent)
                                 if func then
-                                    pcall(func)
+                                    local ok, runErr = pcall(func)
+                                    if not ok then
+                                        Window:Notify({ Title = "Pixel Error", Desc = "Runtime error: " .. tostring(runErr), Time = 10, Type = "error" })
+                                        break
+                                    end
                                 else
-                                    Window:Notify({ Title = "Pixel Error", Desc = "Syntax error in " .. strat.name, Time = 5, Type = "error" })
+                                    Window:Notify({ Title = "Pixel Error", Desc = "Syntax error: " .. tostring(err), Time = 10, Type = "error" })
                                     break
                                 end
                                 
@@ -7596,9 +7603,12 @@ local Strategies = Window:Tab({Title = "Strategies", Icon = "clipboard-list"}) d
                             local func, err = loadstring(safeContent)
                             if func then
                                 Window:Notify({ Title = "Pixel", Desc = "Running " .. strat.name .. "...", Time = 3 })
-                                pcall(func)
+                                local ok, runErr = pcall(func)
+                                if not ok then
+                                    Window:Notify({ Title = "Pixel Error", Desc = "Runtime error: " .. tostring(runErr), Time = 10, Type = "error" })
+                                end
                             else
-                                Window:Notify({ Title = "Pixel Error", Desc = "Syntax error in " .. strat.name, Time = 5, Type = "error" })
+                                Window:Notify({ Title = "Pixel Error", Desc = "Syntax error: " .. tostring(err), Time = 10, Type = "error" })
                             end
                         end
                         
@@ -8549,8 +8559,7 @@ end
 
 local function DoPlaceTower(TName, TPos, ...)
     local args = {...}
-    Logger:Log("Placing tower: " .. TName)
-    local attempts = 0
+    Logger:Log("Waiting to place: " .. TName)
     while true do
         local ok, res = pcall(function()
             return RemoteFunc:InvokeServer("Troops", "Place", {
@@ -8559,17 +8568,16 @@ local function DoPlaceTower(TName, TPos, ...)
             }, TName, unpack(args))
         end)
 
-        if ok and CheckResOk(res) then return true end
-        attempts += 1
-        if attempts >= 40 then        -- ~10s; avoid freezing the strat forever
-            Logger:Log("Place failed after retries: " .. TName)
-            return false
+        if ok and CheckResOk(res) then 
+            return true 
         end
-        task.wait(0.25)
+        task.wait(0.2)
     end
 end
 
 local function DoUpgradeTower(TObj, PathId)
+    local rep = TObj:FindFirstChild("TowerReplicator")
+    local startUpgrades = rep and rep:GetAttribute("Upgrade") or 0
     while true do
         local ok, res = pcall(function()
             return RemoteFunc:InvokeServer("Troops", "Upgrade", "Set", {
@@ -8577,8 +8585,12 @@ local function DoUpgradeTower(TObj, PathId)
                 Path = PathId
             })
         end)
-        if ok and CheckResOk(res) then return true end
-        task.wait(0.25)
+        if ok and CheckResOk(res) then 
+            local t = os.clock()
+            repeat task.wait(0.1) until not TObj.Parent or (rep and (rep:GetAttribute("Upgrade") or 0) > startUpgrades) or os.clock() - t > 3
+            return true 
+        end
+        task.wait(0.2)
     end
 end
 
@@ -8587,8 +8599,12 @@ local function DoSellTower(TObj)
         local ok, res = pcall(function()
             return RemoteFunc:InvokeServer("Troops", "Sell", { Troop = TObj })
         end)
-        if ok and CheckResOk(res) then return true end
-        task.wait(0.25)
+        if ok and CheckResOk(res) then 
+            local t = os.clock()
+            repeat task.wait(0.1) until not TObj.Parent or os.clock() - t > 3
+            return true 
+        end
+        task.wait(0.2)
     end
 end
 
@@ -9025,58 +9041,58 @@ function TDS:Place(TName, px, py, pz, ...)
     local args = {...}
     local isStacking = args[#args] == "stack" or args[#args] == true
 
-    -- Stacking is free (no premium / key system).
-    -- We replicate the manual stacker's proven method: place the tower at an
-    -- elevated Y so the server drops/snaps it onto the tower below. Without the
-    -- elevation the server rejects the placement and nothing happens.
     if isStacking then
-        table.remove(args)              -- strip the trailing "stack"/true flag
-        py = py + 25                    -- raise Y like the manual stacker does
+        table.remove(args)              
+        py = py + 25                    
     end
 
     if GameState ~= "GAME" then
         return false 
     end
 
-    local existing = {}
-    for _, child in ipairs(workspace.Towers:GetChildren()) do
-        for _, SubChild in ipairs(child:GetChildren()) do
-            if SubChild.Name == "Owner" and SubChild.Value == LocalPlayer.UserId then
-                existing[child] = true
-                break
-            end
-        end
-    end
+    local targetPos = Vector3.new(px, py, pz)
+    
+    DoPlaceTower(TName, targetPos, unpack(args))
 
-    DoPlaceTower(TName, Vector3.new(px, py, pz), unpack(args))
-
-    local NewT
-    local deadline = os.clock() + 5
-    repeat
+    local NewT = nil
+    while not NewT do
         for _, child in ipairs(workspace.Towers:GetChildren()) do
-            if not existing[child] then
-                for _, SubChild in ipairs(child:GetChildren()) do
-                    if SubChild.Name == "Owner" and SubChild.Value == LocalPlayer.UserId then
-                        NewT = child
-                        break
+            local rep = child:FindFirstChild("TowerReplicator")
+            if rep and rep:GetAttribute("OwnerId") == LocalPlayer.UserId and rep:GetAttribute("Hologram") ~= true then
+                local tName = rep:GetAttribute("Name") or child.Name
+                if tName == TName then
+                    local alreadyLogged = false
+                    for _, t in ipairs(self.PlacedTowers) do
+                        if t == child then alreadyLogged = true break end
+                    end
+                    
+                    if not alreadyLogged then
+                        local rPos = rep:GetAttribute("Position")
+                        local tPos = child.PrimaryPart and child.PrimaryPart.Position or (rPos or child:GetPivot().Position)
+                        local dist = (Vector3.new(tPos.X, targetPos.Y, tPos.Z) - targetPos).Magnitude
+                        
+                        if dist < 5 or (rPos and (Vector3.new(rPos.X, 0, rPos.Z) - Vector3.new(targetPos.X, 0, targetPos.Z)).Magnitude < 5) then
+                            NewT = child
+                            break
+                        end
                     end
                 end
             end
-            if NewT then break end
         end
-        if not NewT then task.wait(0.05) end
-    until NewT or os.clock() > deadline
+        if not NewT then task.wait(0.1) end
+    end
 
     table.insert(self.PlacedTowers, NewT)
+    Logger:Log("Successfully recorded placement for: " .. TName .. " (Index: " .. #self.PlacedTowers .. ")")
     return #self.PlacedTowers
 end
 
 function TDS:Upgrade(idx, PId)
     local t = self.PlacedTowers[idx]
-    -- skip towers that no longer exist (e.g. stale entries after a restart)
-    if t and t.Parent then
+    if t and typeof(t) == "Instance" and t.Parent then
+        Logger:Log("Waiting to upgrade tower index: " .. idx)
         DoUpgradeTower(t, PId or 1)
-        Logger:Log("Upgrading tower index: " .. idx)
+        Logger:Log("Successfully upgraded tower index: " .. idx)
         UpgradeHistory[idx] = (UpgradeHistory[idx] or 0) + 1
     end
 end
