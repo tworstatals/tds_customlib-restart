@@ -1051,14 +1051,17 @@ local function StartAutoReady()
     end)
 end
 
-local EasyModeRunning = false
+Globals.ActiveStratThreads = Globals.ActiveStratThreads or {}
 
 local function StartEasyMode()
-    if EasyModeRunning or not Globals.Easy then return end
+    if Globals.ActiveStratThreads["Easy"] then
+        pcall(task.cancel, Globals.ActiveStratThreads["Easy"])
+        Globals.ActiveStratThreads["Easy"] = nil
+    end
 
-    EasyModeRunning = true
+    if not Globals.Easy then return end
 
-    task.spawn(function()
+    Globals.ActiveStratThreads["Easy"] = task.spawn(function()
         local content = nil
 
         while Globals.Easy and content == nil do
@@ -1081,15 +1084,13 @@ local function StartEasyMode()
             local func = loadstring(content)
 
             if func then
-                pcall(func)
-
                 Window:Notify({Title = "Pixel", Desc = "Running...", Time = 3})
+                pcall(func)
             end
         end
 
         repeat task.wait(2) until not Globals.Easy or (GameState == "GAME" and not game:IsLoaded())
-
-        EasyModeRunning = false
+        Globals.ActiveStratThreads["Easy"] = nil
     end)
 end
 
