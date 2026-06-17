@@ -7342,6 +7342,8 @@ Window:Line()
 
 local Strategies = Window:Tab({Title = "Strategies", Icon = "clipboard-list"}) do
 
+    Globals.ActiveStratThreads = Globals.ActiveStratThreads or {}
+
     Strategies:Section({Title = "Survival Strategies"})
     Strategies:Toggle({
         Title = "Easy Mode (Summer Castle)",
@@ -7352,7 +7354,12 @@ local Strategies = Window:Tab({Title = "Strategies", Icon = "clipboard-list"}) d
             SetSetting("Easy", v)
 
             if v then
-                StartEasyMode()
+                if Globals.ActiveStratThreads["Easy"] then return end
+                Globals.ActiveStratThreads["Easy"] = true
+                task.spawn(function()
+                    StartEasyMode()
+                    Globals.ActiveStratThreads["Easy"] = nil
+                end)
             end
         end
     })
@@ -7551,7 +7558,11 @@ local Strategies = Window:Tab({Title = "Strategies", Icon = "clipboard-list"}) d
             Callback = function(v)
                 Globals.RunningStrats[strat.name] = v
                 SaveSettings() -- Save state whenever a toggle is pressed
+                
                 if v then
+                    if Globals.ActiveStratThreads[strat.name] then return end
+                    Globals.ActiveStratThreads[strat.name] = true
+                    
                     task.spawn(function()
                         while not (TDS and TDS.Loadout) do
                             task.wait(0.5) 
@@ -7561,7 +7572,7 @@ local Strategies = Window:Tab({Title = "Strategies", Icon = "clipboard-list"}) d
                         local hasAutoRestart = currentContent:match("autorestart%s*=%s*true")
                         local safeContent = currentContent:gsub("while%s+true%s+do", 'while Globals.RunningStrats["' .. strat.name .. '"] do')
                         
-                        if hasAutoRestart and not strat.content:match("while%s+true%s+do") then
+                        if hasAutoRestart and not currentContent:match("while%s+true%s+do") then
                             Window:Notify({ Title = "Pixel", Desc = "Running " .. strat.name .. " with Auto-Restart...", Time = 3 })
                             while Globals.RunningStrats[strat.name] do
                                 TDS:Reset()
@@ -7589,6 +7600,8 @@ local Strategies = Window:Tab({Title = "Strategies", Icon = "clipboard-list"}) d
                                 Window:Notify({ Title = "Pixel Error", Desc = "Syntax error in " .. strat.name, Time = 5, Type = "error" })
                             end
                         end
+                        
+                        Globals.ActiveStratThreads[strat.name] = nil
                     end)
                 end
             end
@@ -7597,45 +7610,9 @@ local Strategies = Window:Tab({Title = "Strategies", Icon = "clipboard-list"}) d
         -- Store the toggle reference so we can delete/hide it later
         Globals.LoadedStrats[strat.name] = newToggle
         
-        -- Autostart if it was saved as true
-        if savedValue then
-            task.spawn(function()
-                while not (TDS and TDS.Loadout) do
-                    task.wait(0.5) 
-                end
-                
-                local currentContent = Globals.StratContents[strat.name] or strat.content
-                local hasAutoRestart = currentContent:match("autorestart%s*=%s*true")
-                local safeContent = currentContent:gsub("while%s+true%s+do", 'while Globals.RunningStrats["' .. strat.name .. '"] do')
-                
-                if hasAutoRestart and not strat.content:match("while%s+true%s+do") then
-                    Window:Notify({ Title = "Pixel", Desc = "Auto-starting " .. strat.name .. "...", Time = 3 })
-                    while Globals.RunningStrats[strat.name] do
-                        TDS:Reset()
-                        TDS:ClearLog()
-                        
-                        local func, err = loadstring(safeContent)
-                        if func then
-                            pcall(func)
-                        else
-                            Window:Notify({ Title = "Pixel Error", Desc = "Syntax error in " .. strat.name, Time = 5, Type = "error" })
-                            break
-                        end
-                        
-                        if Globals.RunningStrats[strat.name] then
-                            TDS:RestartGame()
-                            task.wait(5)
-                        end
-                    end
-                else
-                    local func, err = loadstring(safeContent)
-                    if func then
-                        Window:Notify({ Title = "Pixel", Desc = "Auto-starting " .. strat.name .. "...", Time = 3 })
-                        pcall(func)
-                    end
-                end
-            end)
-        end
+        -- NOTE: We removed the explicit autostart block because the UI library's Toggle 
+        -- automatically fires its Callback with the initial `Value` ~0.1 seconds after creation!
+        -- The callback alone perfectly handles autostarting without spawning duplicate threads.
     end
 
     Strategies:Section({Title = "Custom Strategies"})
