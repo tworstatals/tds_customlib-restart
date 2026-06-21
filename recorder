@@ -1,9 +1,6 @@
 local Globals = getgenv()
 
 local function init_recorder(ctx)
-    -- Recorder is STANDALONE: it does NOT require the library or its UI.
-    -- ctx is optional. When the library loads us it passes a context (Window,
-    -- GameState, etc.); when run on our own we fall back to sane defaults.
     if Globals.__recorder_running then return end   -- never init twice
     Globals.__recorder_running = true
     ctx = ctx or {}
@@ -691,17 +688,32 @@ local function init_recorder(ctx)
         end
         if not Globals.__tds_recorder_hooked then
             Globals.__tds_recorder_hooked = true
-            local original
-            original = hookmetamethod(game, "__namecall", function(self, ...)
-                local method = getnamecallmethod and getnamecallmethod() or nil
+            
+            local originalFire
+            originalFire = hookfunction(Instance.new("RemoteEvent").FireServer, function(self, ...)
                 local args = {...}
-                local results = table.pack(original(self, ...))
+                local results = table.pack(originalFire(self, ...))
                 local handler = Globals.__tds_recorder_handler
-                if handler and method then
+                if handler then
                     task.spawn(function()
                         local set_id = setthreadidentity or setidentity or setthreadcontext
                         if set_id then set_id(7) end
-                        pcall(handler, self, method, args, results)
+                        pcall(handler, self, "FireServer", args, results)
+                    end)
+                end
+                return table.unpack(results, 1, results.n)
+            end)
+
+            local originalInvoke
+            originalInvoke = hookfunction(Instance.new("RemoteFunction").InvokeServer, function(self, ...)
+                local args = {...}
+                local results = table.pack(originalInvoke(self, ...))
+                local handler = Globals.__tds_recorder_handler
+                if handler then
+                    task.spawn(function()
+                        local set_id = setthreadidentity or setidentity or setthreadcontext
+                        if set_id then set_id(7) end
+                        pcall(handler, self, "InvokeServer", args, results)
                     end)
                 end
                 return table.unpack(results, 1, results.n)
@@ -796,11 +808,7 @@ local function init_recorder(ctx)
             if not skip_game_info then
                 game_info_str = string.format('\nTDS:GameInfo("%s", {%s})', current_map, current_modifiers)
             end
-            local config_header = string.format([[
-TDS:Loadout("%s", "%s", "%s", "%s", "%s")
-TDS:Mode("%s")%s
-]], tower1, tower2, tower3, tower4, tower5, current_mode, game_info_str)
-            writefile("Strat.txt", config_header)
+            writefile("Strat.txt", "")
         end
 
         notify("Pixel", "Recorder has started, place towers or type commands in the menu.")
